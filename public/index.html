@@ -308,6 +308,10 @@ body.cockpit #hint{display:none}
 #introGo:focus-visible{outline:2px solid #fff;outline-offset:5px}
 @media (max-width:520px){#introName{letter-spacing:.2em;margin-right:-.2em}#introTag{letter-spacing:.26em;margin-right:-.26em}#introGo{min-height:56px;padding:0 34px;font-size:16px}}
 @media (max-height:440px){.intro-c{gap:12px}#introName{font-size:clamp(26px,9vh,48px)}#introLogo{max-height:30vh}}
+#introGo.in[aria-disabled=true]{opacity:.55;cursor:progress}#introGo[aria-disabled=true]:hover{background:#f4f5f7;transform:none}#introGo[aria-disabled=true]:hover svg{transform:none}
+.intro-human{display:flex;flex-direction:column;align-items:center;gap:10px;min-height:20px;margin-top:-6px}
+#introHumanMsg{margin:0;font-family:Inter,system-ui,sans-serif;font-size:12px;letter-spacing:.08em;color:#9aa1ab;line-height:1.6;max-width:min(420px,90vw)}
+#introHumanMsg:empty{display:none}
 @media (prefers-reduced-motion:reduce){#intro,.intro-c,.intro-c>*,#introGo,#introGo svg{transition-duration:.25s!important}}
 .pill.coffee{text-decoration:none;color:#ffe1a6;border-color:rgba(255,205,120,.38);background:rgba(255,190,90,.08)}.pill.coffee:hover{background:rgba(255,190,90,.18);border-color:rgba(255,205,120,.65);color:#fff1cf}
 .ckbar a.ckkey{position:relative;min-width:72px;height:46px;padding:7px 10px 6px;border-radius:6px;background:linear-gradient(180deg,#2a2413,#120f08);border:1px solid #6b5420;box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 2px 0 #000;color:#ffd27a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-decoration:none;box-sizing:border-box;transition:transform .08s,border-color .2s,color .2s}
@@ -426,7 +430,8 @@ body.cockpit .rail{display:none}
 @media (prefers-reduced-motion:reduce){ .tele,#fade,#toast,.pill{transition:none} }
 </style>
 
-<div id="intro" role="region" aria-label="Welcome to Cosmossian" hidden>
+<!-- data-sitekey: the public site key of the "Cosmossian title screen" Turnstile widget (the secret half is the Worker's TURNSTILE_SECRET) -->
+<div id="intro" role="region" aria-label="Welcome to Cosmossian" data-sitekey="0x4AAAAAAF-rcM5TXWsqQ8Sm" hidden>
   <canvas id="introSky" aria-hidden="true"></canvas>
   <div class="intro-c">
     <!-- the approved logo (logo.png); the plain-type name below is only shown if that file fails to load -->
@@ -434,6 +439,8 @@ body.cockpit .rail{display:none}
     <h1 id="introName">COSMOSSIAN</h1>
     <p id="introTag">The Universe Is Yours to Explore.</p>
     <button type="button" id="introGo">Explore the Galaxy<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8h11M9 4l4 4-4 4"/></svg></button>
+    <!-- human check: Cloudflare Turnstile. Invisible for most visitors; it only shows a checkbox when Cloudflare is unsure -->
+    <div id="introHuman" class="intro-human"><div id="introTs"></div><p id="introHumanMsg" role="status" aria-live="polite"></p></div>
   </div>
   <!-- set the two addresses below to your own profile and page -->
   <nav class="intro-links" aria-label="Follow and support">
@@ -444,10 +451,11 @@ body.cockpit .rail{display:none}
 </div>
 <script>
 /* Entrance screen. It sits on top of the explorer, which starts up underneath and is held still until you enter.
-   Open the page with #explore in the address to go straight to the explorer. */
+   Entering needs the human check (Cloudflare Turnstile) to pass first; after that the Worker's cookie skips it for 30 days.
+   Open the page with #explore in the address to go straight to the explorer once the check has passed. */
 (function(){
   const el=document.getElementById('intro');if(!el)return;
-  if(location.hash==='#explore'){el.remove();return;}
+  const skip=location.hash==='#explore';
   el.hidden=false;window.__intro=true;
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('introSky'),box=el.querySelector('.intro-c'),go=document.getElementById('introGo');
@@ -458,7 +466,37 @@ body.cockpit .rail{display:none}
   const T0=performance.now();let raf=0,done=false,warp=0,warpT=0,W=0,H=0,dpr=1,stars=[],neb=null,mx=0,my=0,px=0,py=0,meteor=null,nextMeteor=3500+Math.random()*7000,g=null;const meteors=[];
   const timers=[];const later=(f,ms)=>timers.push(setTimeout(f,ms));
   const show=(n,ms)=>later(()=>{n.classList.add('in');if(n===name)logo.classList.add('in');},reduce?150:ms);
-  show(name,2300);show(document.getElementById('introTag'),3500);show(go,4500);show(el.querySelector('.intro-links'),5300);
+  show(name,2300);show(document.getElementById('introTag'),3500);show(go,4500);show(document.getElementById('introHuman'),4500);show(el.querySelector('.intro-links'),5300);
+  // ---- human check ----
+  const hm=document.getElementById('introHumanMsg');let human=false,wantEnter=false,wid=null,fails=0;
+  const say=t=>{hm.textContent=t||'';};
+  go.setAttribute('aria-disabled','true');
+  function pass(){if(human)return;human=true;go.removeAttribute('aria-disabled');say('');if(skip){finish();return;}if(wantEnter)enter();}
+  function sendToken(t){
+    fetch('/api/verify',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({token:t})})
+      .then(r=>{if(!r.ok)throw new Error(String(r.status));pass();})
+      .catch(()=>{fails++;if(fails>=3){say('We could not confirm you are human. Please reload the page to try again.');return;}
+        say('Verification failed, trying again\u2026');setTimeout(()=>{try{turnstile.reset(wid);}catch(e){}},1500);});
+  }
+  function renderTs(){
+    if(wid!==null||human)return;
+    try{wid=turnstile.render('#introTs',{sitekey:el.dataset.sitekey,action:'intro',theme:'dark',appearance:'interaction-only',
+      callback:sendToken,
+      'before-interactive-callback':()=>say('Please confirm you are human to enter.'),
+      'after-interactive-callback':()=>say(''),
+      'expired-callback':()=>{try{turnstile.reset(wid);}catch(e){}},
+      'error-callback':()=>{say('The human check hit a problem, retrying\u2026');},
+      'unsupported-callback':()=>say('Your browser is not supported by the human check. Please try another browser.')});}
+    catch(e){say('The human check could not start. Please reload the page.');}
+  }
+  function loadTs(){
+    if(human)return;if(window.turnstile){renderTs();return;}
+    window.__csTurnstile=renderTs;const sc=document.createElement('script');
+    sc.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=__csTurnstile';sc.async=true;
+    sc.onerror=()=>say('The human check could not load. Check your connection or content blocker, then reload.');
+    document.head.appendChild(sc);
+  }
+  fetch('/api/human',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():{}).then(j=>{if(j&&j.human)pass();else loadTs();}).catch(loadTs);
   function build(){
     const small=Math.min(innerWidth,innerHeight)<700;dpr=Math.min(devicePixelRatio||1,small?1.5:2);W=innerWidth;H=innerHeight;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
     g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
@@ -501,10 +539,10 @@ body.cockpit .rail{display:none}
   function loop(now){if(done)return;raf=requestAnimationFrame(loop);if(document.hidden)return;try{draw(now);}catch(e){cancelAnimationFrame(raf);cv.style.display='none';}}
   function finish(){if(done)return;done=true;window.__intro=false;el.classList.add('out');later(cleanup,1200);}
   function cleanup(){cancelAnimationFrame(raf);timers.forEach(clearTimeout);removeEventListener('resize',onResize);removeEventListener('pointermove',onMove);removeEventListener('keydown',onKey,true);el.remove();stars=[];neb=null;}
-  function enter(){if(warp||done)return;go.disabled=true;el.classList.add('go');if(reduce||cv.style.display==='none'){finish();return;}warp=1;warpT=performance.now();later(finish,2400);}
+  function enter(){if(warp||done)return;if(!human){wantEnter=true;if(!hm.textContent)say('Checking you are human\u2026');return;}go.disabled=true;el.classList.add('go');if(reduce||cv.style.display==='none'){finish();return;}warp=1;warpT=performance.now();later(finish,2400);}
   const onResize=()=>{try{build();if(reduce)draw(performance.now());}catch(e){}};
   const onMove=e=>{mx=(e.clientX/innerWidth-0.5)*2;my=(e.clientY/innerHeight-0.5)*2;};
-  const onKey=e=>{if(done)return;if(e.key==='Tab'){const f=[go,...el.querySelectorAll('.intro-links a')],i=f.indexOf(document.activeElement);e.preventDefault();f[(i+(e.shiftKey?-1:1)+f.length)%f.length].focus();}else if(e.key!=='Enter'&&e.key!==' ')e.stopPropagation();else if(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('.intro-links')){e.stopPropagation();}else if(document.activeElement!==go){e.preventDefault();e.stopPropagation();enter();}};
+  const onKey=e=>{if(done)return;if(e.key==='Tab'){const f=[go,...el.querySelectorAll('#introTs iframe, .intro-links a')],i=f.indexOf(document.activeElement);e.preventDefault();f[(i+(e.shiftKey?-1:1)+f.length)%f.length].focus();}else if(e.key!=='Enter'&&e.key!==' ')e.stopPropagation();else if(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('.intro-links')){e.stopPropagation();}else if(document.activeElement!==go){e.preventDefault();e.stopPropagation();enter();}};
   go.addEventListener('click',enter);addEventListener('resize',onResize);addEventListener('pointermove',onMove,{passive:true});addEventListener('keydown',onKey,true);
   try{build();if(reduce)draw(performance.now()+4000);else raf=requestAnimationFrame(loop);}catch(e){cv.style.display='none';}
 })();

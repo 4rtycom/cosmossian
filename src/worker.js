@@ -15,12 +15,13 @@ const CANONICAL = 'cosmossian.com';
 // security headers on every response the Worker sends (files served straight from ./public get the same set from public/_headers)
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com",
+  "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob:",
   "connect-src 'self' https://cloudflareinsights.com",
   "worker-src 'self' blob:",
+  "frame-src https://challenges.cloudflare.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'none'",
@@ -66,6 +67,8 @@ async function route(request, env, ctx) {
     const ip = request.headers.get('cf-connecting-ip') || 'unknown';
     if (env.API_LIMIT && !(await env.API_LIMIT.limit({ key: 'api:' + ip })).success) return text('too many requests', 429, { 'Retry-After': '60' });
     if (p === '/api/health') return m === 'GET' || m === 'HEAD' ? health(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
+    if (p === '/api/human') return m === 'GET' ? json({ human: await isHuman(request, env) }) : text('method not allowed', 405, { Allow: 'GET' });
+    if (p === '/api/verify') return m === 'POST' ? verifyHuman(request, env, ip) : text('method not allowed', 405, { Allow: 'POST' });
     if (p === '/api/refresh') {
       if (m !== 'GET' && m !== 'POST') return text('method not allowed', 405, { Allow: 'GET, POST' });
       if (env.REFRESH_LIMIT && !(await env.REFRESH_LIMIT.limit({ key: 'refresh:' + ip })).success) return text('too many requests', 429, { 'Retry-After': '60' });
@@ -83,9 +86,51 @@ async function route(request, env, ctx) {
   return env.ASSETS.fetch(request);
 }
 
+/* ---------- human check (Cloudflare Turnstile on the title screen) ----------
+   The title screen sends its Turnstile token to /api/verify. The Worker checks it with Cloudflare and answers with a signed,
+   HttpOnly cookie, so the same visitor is not checked again for HUMAN_DAYS. /api/human tells the page whether that cookie is valid. */
+const HUMAN_COOKIE = '__Host-cs_human';
+const HUMAN_DAYS = 30;
+const TURNSTILE_TEST_SECRETS = ['1x0000000000000000000000000000000AA', '2x0000000000000000000000000000000AA'];
+
+async function humanSig(secret, exp) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode('cs-human:' + secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(String(exp))));
+  return btoa(String.fromCharCode(...mac)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function isHuman(request, env) {
+  if (!env.TURNSTILE_SECRET) return false;
+  const c = (request.headers.get('cookie') || '').split(/;\s*/).find(x => x.startsWith(HUMAN_COOKIE + '='));
+  if (!c) return false;
+  const [exp, sig] = c.slice(HUMAN_COOKIE.length + 1).split('.');
+  if (!/^\d{10}$/.test(exp || '') || !sig || Number(exp) < Date.now() / 1000) return false;
+  return sameSecret(sig, await humanSig(env.TURNSTILE_SECRET, exp), 1);
+}
+
+async function verifyHuman(request, env, ip) {
+  if (!env.TURNSTILE_SECRET) return text('human check not configured', 503);
+  let token = '';
+  try { const body = await request.text(); if (body.length > 4096) return text('bad request', 400); token = String(JSON.parse(body).token || ''); } catch { return text('bad request', 400); }
+  if (!token || token.length > 2048) return text('bad request', 400);
+  const form = new URLSearchParams({ secret: env.TURNSTILE_SECRET, response: token, remoteip: ip, idempotency_key: crypto.randomUUID() });
+  let out;
+  try {
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form });
+    out = await r.json();
+  } catch { return text('verification unavailable', 502); }
+  const test = TURNSTILE_TEST_SECRETS.includes(env.TURNSTILE_SECRET);
+  // Cloudflare's test keys answer with a dummy hostname and no action, so those two checks apply to real keys only
+  const ok = !!out && out.success === true && (test || (out.action === 'intro' && out.hostname === CANONICAL));
+  if (!ok) return json({ human: false, errors: (out && out['error-codes']) || [] }, 403);
+  const exp = Math.floor(Date.now() / 1000) + HUMAN_DAYS * 86400;
+  const cookie = `${HUMAN_COOKIE}=${exp}.${await humanSig(env.TURNSTILE_SECRET, exp)}; Path=/; Max-Age=${HUMAN_DAYS * 86400}; Secure; HttpOnly; SameSite=Lax`;
+  return json({ human: true }, 200, { 'Set-Cookie': cookie });
+}
+
 // constant-time comparison, so the key cannot be guessed from response timing
-async function sameSecret(given, secret) {
-  if (!secret || secret.length < 24 || !given) return false;
+async function sameSecret(given, secret, minLength = 24) {
+  if (!secret || secret.length < minLength || !given) return false;
   const enc = new TextEncoder();
   const [a, b] = await Promise.all([given, secret].map(s => crypto.subtle.digest('SHA-256', enc.encode(s))));
   return crypto.subtle.timingSafeEqual(a, b);
@@ -228,4 +273,4 @@ async function health(env) {
   if (env.LIVE) { out.meta = JSON.parse((await env.LIVE.get('meta')) || '{}'); out.lastRun = JSON.parse((await env.LIVE.get('report')) || 'null'); }
   return json(out);
 }
-const json = o => new Response(JSON.stringify(o, null, 2), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+const json = (o, status = 200, extra) => new Response(JSON.stringify(o, null, 2), { status, headers: Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, extra || {}) });
