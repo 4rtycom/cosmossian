@@ -51,7 +51,7 @@ npx wrangler login
 npx wrangler kv namespace create LIVE
 ```
 
-Paste the printed namespace id into `wrangler.toml` at `PASTE_THE_KV_ID_HERE`. Leave `REFRESH_KEY` out of `wrangler.toml`.
+The `LIVE` namespace already exists (`cosmossian-LIVE`) and its id is in `wrangler.toml`; only create a new one for a different account. Leave `REFRESH_KEY` out of `wrangler.toml`.
 
 ```bash
 npm run dev
@@ -77,13 +77,15 @@ Feeds used by the Worker:
 
 Results are stored in the `LIVE` KV namespace. The homepage reads those keys and injects them into the matching script tags. A failed fetch leaves the previous KV value, or the HTML snapshot when KV is empty.
 
-Manual refresh (after deploy, with the secret you set):
+Manual refresh (after deploy, with the secret you set). Sending the key in a header keeps it out of logs:
 
-```text
-https://<your-worker-host>/api/refresh?key=<REFRESH_KEY>
-https://<your-worker-host>/api/refresh?key=<REFRESH_KEY>&only=sats
-https://<your-worker-host>/api/health
+```bash
+curl -H "Authorization: Bearer <REFRESH_KEY>" https://cosmossian.com/api/refresh
+curl -H "Authorization: Bearer <REFRESH_KEY>" "https://cosmossian.com/api/refresh?only=sats"
+curl https://cosmossian.com/api/health
 ```
+
+`?key=<REFRESH_KEY>` still works. The key must be at least 24 characters.
 
 `only` accepts `sats`, `exo`, and `sb`. `/api/health` reports whether `LIVE` is bound and the last refresh metadata.
 
@@ -97,6 +99,15 @@ https://<your-worker-host>/api/health
 | everything else | static file from `public/` |
 
 `wrangler.toml` lists custom domains `cosmossian.com` and `www.cosmossian.com`. Publishing with those routes attaches the Worker to those hostnames. This repository does not change DNS by itself.
+
+## Security
+
+- Every response carries a Content-Security-Policy, HSTS, `X-Frame-Options: DENY`, `nosniff`, a Referrer-Policy and a Permissions-Policy. The Worker sets them on its own responses; `public/_headers` sets the same on files served straight from `public/`.
+- `www.cosmossian.com` redirects to `cosmossian.com`.
+- `/api/*` is rate limited per visitor (`API_LIMIT`, 30 per minute; `REFRESH_LIMIT`, 3 per minute) and only accepts the methods it uses.
+- The refresh key is compared in constant time.
+- Live data written into the page is escaped so a feed can never break out of its `<script>` tag.
+- Zone-level protection (SSL mode, WAF, bots, DDoS) is set in the Cloudflare dashboard, not in this repository.
 
 ## Deploy
 
@@ -119,7 +130,8 @@ Create or confirm these in the Cloudflare account. This repo does not contain th
 
 | Name | Kind |
 | --- | --- |
-| `LIVE` | Workers KV namespace; binding name in `wrangler.toml` |
+| `LIVE` | Workers KV namespace `cosmossian-LIVE` (created; id in `wrangler.toml`) |
+| `API_LIMIT`, `REFRESH_LIMIT` | rate limiting bindings (declared in `wrangler.toml`) |
 | `REFRESH_KEY` | Worker secret (`wrangler secret put`) |
 | `ASSETS` | assets binding for `./public` (declared in `wrangler.toml`) |
 | Worker name `cosmossian` | Workers script |

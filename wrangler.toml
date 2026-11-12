@@ -2,24 +2,45 @@ name = "cosmossian"
 main = "src/worker.js"
 compatibility_date = "2025-06-01"
 
-# the app and its data, images and textures
-[assets]
-directory = "./public"
-binding = "ASSETS"
-run_worker_first = ["/", "/index.html", "/api/*"]
-
-# custom domain (DNS for cosmossian.com must be on Cloudflare, which it is)
+# custom domain (DNS for cosmossian.com must be on Cloudflare, in this same account)
 routes = [
   { pattern = "cosmossian.com", custom_domain = true },
   { pattern = "www.cosmossian.com", custom_domain = true }
 ]
 
+# the app and its data, images and textures
+# public/_headers adds the security headers to every file served straight from here
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/", "/index.html", "/api/*"]
+
 # refresh live data every 3 hours (exoplanets daily, small bodies weekly)
 [triggers]
 crons = ["7 */3 * * *"]
 
-# where the refreshed data is kept; create it once with:  npx wrangler kv namespace create LIVE
-# then paste the id it prints below
+# where the refreshed data is kept (KV namespace "cosmossian-LIVE")
 [[kv_namespaces]]
 binding = "LIVE"
-id = "PASTE_THE_KV_ID_HERE"
+id = "a6271a9ddf8842f9ac3ef0cbd4f2f584"
+
+# per-visitor limits on the /api endpoints (per Cloudflare location, approximate)
+[[ratelimits]]
+name = "API_LIMIT"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
+
+[[ratelimits]]
+name = "REFRESH_LIMIT"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 3
+  period = 60
+
+# request logs and errors in the Cloudflare dashboard
+[observability]
+enabled = true
