@@ -93,6 +93,10 @@ curl https://cosmossian.com/api/health
 
 Planet photos load on demand: a body's textures are fetched once it is a few pixels across on screen or is the focus, so the first visit only downloads the page and the sky catalogues. The 4096 px files (Earth, Moon, Jupiter, Saturn, Neptune) have 2048 px copies in `public/tex/2k/`, which are used by default; the 4096 px originals are loaded only up close on desktops whose GPU supports 8192 px textures. Cockpit photos (`public/deck/`) load after the visitor has entered. If you replace a 4096 px texture, regenerate its copy in `tex/2k/`.
 
+## ISS model
+
+Selecting the ISS (its label, or "ISS" in search) flies the camera to the station and loads NASA's 3D model on demand: `public/models/iss-hd/` (NASA 3D Resources "ISS (D) (IGOAL)", ~2.7 million triangles, ~33 MB, Draco-compressed geometry and WebP textures, split into files under Cloudflare's 25 MB asset limit) on desktops, `public/models/iss-lite.glb` (~175,000 triangles, 0.5 MB) on phones and tablets. The loaders and Draco decoder are self-hosted in `public/lib/`. The model replaces the simple stand-in only when it is large on screen. Credits and licences: `public/lib/README.txt`.
+
 ## Routes
 
 | Path | Behavior |
