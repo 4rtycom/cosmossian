@@ -1,0 +1,12 @@
+{
+  "name": "cosmossian",
+  "private": true,
+  "description": "Cosmossian: a free 3D atlas of the universe, served on Cloudflare with live data.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}
