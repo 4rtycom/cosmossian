@@ -89,6 +89,10 @@ curl https://cosmossian.com/api/health
 
 `only` accepts `sats`, `exo`, and `sb`. `/api/health` reports whether `LIVE` is bound and the last refresh metadata.
 
+## Textures
+
+Planet photos load on demand: a body's textures are fetched once it is a few pixels across on screen or is the focus, so the first visit only downloads the page and the sky catalogues. The 4096 px files (Earth, Moon, Jupiter, Saturn, Neptune) have 2048 px copies in `public/tex/2k/`, which are used by default; the 4096 px originals are loaded only up close on desktops whose GPU supports 8192 px textures. Cockpit photos (`public/deck/`) load after the visitor has entered. If you replace a 4096 px texture, regenerate its copy in `tex/2k/`.
+
 ## Routes
 
 | Path | Behavior |
