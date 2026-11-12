@@ -2562,6 +2562,8 @@ function goTier(t){
     const sb=selected&&selected.type==='body'&&bodies[selected.key];
     const inSys=tier==='solar'||tier==='exo'||tier==='surface';
     let b=sb&&sb.kind!=='star'?sb:null;if(!b&&C.focus&&C.focus.kind&&C.focus.kind!=='star')b=C.focus;
+    // the station is a craft: it has no sys and is not in bodies, so flyToBody/enterExo would throw
+    if(b===ISS.F){flyToISS();return;}
     if(!b&&inSys&&active!=='sol'&&!exoBodies.length){toast('No planets are known here: showing the star');flyToBody(exoStar);return;}
     if(!b)b=(inSys&&active!=='sol'&&exoBodies[0])||bodies.earth;
     if(inSys&&b.sys===active)flyToBody(b);
@@ -2569,7 +2571,7 @@ function goTier(t){
   }
 }
 function solarOverview(){if(CK.on&&active==='sol'){tier='solar';CK.goto='*';applyTierUI();return;}active='sol';tier='solar';focusBody(SUN,{ground:false,alt:120,dur:2.4});C.gPh=1.05;applyTierUI();
-  if(!selected||selected.type==='body')select({type:'body',key:'sun'});}
+  if(!selected||selected.type==='body'||selected.type==='iss')select({type:'body',key:'sun'});}
 function flyToBody(b){
   select({type:'body',key:b.key});
   if(CK.on){tier=active==='sol'?'solar':'exo';CK.goto=b.key;applyTierUI();return;}
