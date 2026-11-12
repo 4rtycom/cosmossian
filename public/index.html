@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Cosmossian: a free 3D atlas of the universe, from planet surfaces to the observable universe, with real data.">
+<meta name="description" content="Explore the universe in 3D, from the surface of Mars to distant galaxies. Discover planets, stars and constellations in a free atlas built with real astronomy data.">
 <meta property="og:title" content="Cosmossian">
 <meta property="og:description" content="The Universe Is Yours to Explore.">
 <meta property="og:type" content="website">
@@ -21,7 +21,7 @@
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<title>Cosmossian</title>
+<title>Interactive 3D Map of the Universe | Cosmossian</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -320,7 +320,8 @@ body.cockpit #hint{display:none}
 #introGo:focus-visible{outline:2px solid #fff;outline-offset:5px}
 @media (max-width:520px){#introName{letter-spacing:.2em;margin-right:-.2em}#introTag{letter-spacing:.26em;margin-right:-.26em}#introGo{min-height:56px;padding:0 34px;font-size:16px}}
 @media (max-height:440px){.intro-c{gap:12px}#introName{font-size:clamp(26px,9vh,48px)}#introLogo{max-height:30vh}}
-#introGo.in[aria-disabled=true]{opacity:.55;cursor:progress}#introGo[aria-disabled=true]:hover{background:#f4f5f7;transform:none}#introGo[aria-disabled=true]:hover svg{transform:none}
+#introWait{position:absolute;left:0;right:0;bottom:calc(84px + env(safe-area-inset-bottom,0px));margin:0;text-align:center;font-family:Inter,system-ui,sans-serif;font-size:12px;letter-spacing:.08em;color:#9aa1ab;opacity:0;transition:opacity .6s ease;pointer-events:none}
+#intro.wait #introWait{opacity:1}
 .intro-human{display:flex;flex-direction:column;align-items:center;gap:10px;min-height:20px;margin-top:-6px}
 #introHumanMsg{margin:0;font-family:Inter,system-ui,sans-serif;font-size:12px;letter-spacing:.08em;color:#9aa1ab;line-height:1.6;max-width:min(420px,90vw)}
 #introHumanMsg:empty{display:none}
@@ -454,6 +455,7 @@ body.cockpit .rail{display:none}
     <!-- human check: Cloudflare Turnstile. Invisible for most visitors; it only shows a checkbox when Cloudflare is unsure -->
     <div id="introHuman" class="intro-human"><div id="introTs"></div><p id="introHumanMsg" role="status" aria-live="polite"></p></div>
   </div>
+  <p id="introWait" aria-hidden="true">Checking you are human&hellip;</p>
   <!-- set the two addresses below to your own profile and page -->
   <nav class="intro-links" aria-label="Follow and support">
     <a id="introX" class="sq" href="https://x.com/" target="_blank" rel="noopener noreferrer" aria-label="Cosmossian on X" title="X"><img src="data:image/png;base64,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" alt="" aria-hidden="true"></a>
@@ -480,32 +482,33 @@ body.cockpit .rail{display:none}
   const show=(n,ms)=>later(()=>{n.classList.add('in');if(n===name)logo.classList.add('in');},reduce?150:ms);
   show(name,2300);show(document.getElementById('introTag'),3500);show(go,4500);show(document.getElementById('introHuman'),4500);show(el.querySelector('.intro-links'),5300);
   // ---- human check ----
-  const hm=document.getElementById('introHumanMsg');let human=false,wantEnter=false,wid=null,fails=0;
+  const hm=document.getElementById('introHumanMsg');let human=false,wantEnter=false,wid=null,fails=0,needVisitor=false;
   const say=t=>{hm.textContent=t||'';};
-  go.setAttribute('aria-disabled','true');
-  function pass(){if(human)return;human=true;go.removeAttribute('aria-disabled');say('');if(skip){finish();return;}if(wantEnter)enter();}
+  // Explore can be pressed at once: the entry animation plays while the check finishes, and the explorer opens only after it has passed.
+  function hold(){if(!el.classList.contains('go'))return;warp=0;el.classList.remove('go','wait');go.disabled=false;} // back to the title screen (the widget needs the visitor)
+  function pass(){if(human)return;human=true;say('');if(skip||warp){finish();return;}if(wantEnter)enter();}
   function sendToken(t){
     fetch('/api/verify',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({token:t})})
       .then(r=>{if(!r.ok)throw new Error(String(r.status));pass();})
-      .catch(()=>{fails++;if(fails>=3){say('We could not confirm you are human. Please reload the page to try again.');return;}
-        say('Verification failed, trying again\u2026');setTimeout(()=>{try{turnstile.reset(wid);}catch(e){}},1500);});
+      .catch(()=>{fails++;if(fails>=3){hold();say('We could not confirm you are human. Please reload the page to try again.');return;}
+        hold();say('Verification failed, trying again\u2026');setTimeout(()=>{try{turnstile.reset(wid);}catch(e){}},1500);});
   }
   function renderTs(){
     if(wid!==null||human)return;
     try{wid=turnstile.render('#introTs',{sitekey:el.dataset.sitekey,action:'intro',theme:'dark',appearance:'interaction-only',
       callback:sendToken,
-      'before-interactive-callback':()=>say('Please confirm you are human to enter.'),
-      'after-interactive-callback':()=>say(''),
+      'before-interactive-callback':()=>{needVisitor=true;hold();say('Please confirm you are human to enter.');},
+      'after-interactive-callback':()=>{needVisitor=false;say('');},
       'expired-callback':()=>{try{turnstile.reset(wid);}catch(e){}},
       'error-callback':()=>{say('The human check hit a problem, retrying\u2026');},
-      'unsupported-callback':()=>say('Your browser is not supported by the human check. Please try another browser.')});}
+      'unsupported-callback':()=>{hold();say('Your browser is not supported by the human check. Please try another browser.');}});}
     catch(e){say('The human check could not start. Please reload the page.');}
   }
   function loadTs(){
     if(human)return;if(window.turnstile){renderTs();return;}
     window.__csTurnstile=renderTs;const sc=document.createElement('script');
     sc.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=__csTurnstile';sc.async=true;
-    sc.onerror=()=>say('The human check could not load. Check your connection or content blocker, then reload.');
+    sc.onerror=()=>{hold();say('The human check could not load. Check your connection or content blocker, then reload.');};
     document.head.appendChild(sc);
   }
   fetch('/api/human',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():{}).then(j=>{if(j&&j.human)pass();else loadTs();}).catch(loadTs);
@@ -549,9 +552,10 @@ body.cockpit .rail{display:none}
     if(warp&&wk>=1&&!done)finish();
   }
   function loop(now){if(done)return;raf=requestAnimationFrame(loop);if(document.hidden)return;try{draw(now);}catch(e){cancelAnimationFrame(raf);cv.style.display='none';}}
-  function finish(){if(done)return;done=true;window.__intro=false;el.classList.add('out');later(cleanup,1200);}
+  function finish(){if(done)return;if(!human){if(el.classList.contains('go'))el.classList.add('wait');return;} // still checking: hold at full warp
+    done=true;window.__intro=false;el.classList.remove('wait');el.classList.add('out');dispatchEvent(new Event('cosmossian:entered'));later(cleanup,1200);}
   function cleanup(){cancelAnimationFrame(raf);timers.forEach(clearTimeout);removeEventListener('resize',onResize);removeEventListener('pointermove',onMove);removeEventListener('keydown',onKey,true);el.remove();stars=[];neb=null;}
-  function enter(){if(warp||done)return;if(!human){wantEnter=true;if(!hm.textContent)say('Checking you are human\u2026');return;}go.disabled=true;el.classList.add('go');if(reduce||cv.style.display==='none'){finish();return;}warp=1;warpT=performance.now();later(finish,2400);}
+  function enter(){if(warp||done)return;wantEnter=true;if(needVisitor&&!human){say('Please confirm you are human to enter.');return;}go.disabled=true;el.classList.add('go');if(reduce||cv.style.display==='none'){finish();return;}warp=1;warpT=performance.now();later(finish,2400);}
   const onResize=()=>{try{build();if(reduce)draw(performance.now());}catch(e){}};
   const onMove=e=>{mx=(e.clientX/innerWidth-0.5)*2;my=(e.clientY/innerHeight-0.5)*2;};
   const onKey=e=>{if(done)return;if(e.key==='Tab'){const f=[go,...el.querySelectorAll('#introTs iframe, .intro-links a')],i=f.indexOf(document.activeElement);e.preventDefault();f[(i+(e.shiftKey?-1:1)+f.length)%f.length].focus();}else if(e.key!=='Enter'&&e.key!==' ')e.stopPropagation();else if(document.activeElement&&document.activeElement.closest&&document.activeElement.closest('.intro-links')){e.stopPropagation();}else if(document.activeElement!==go){e.preventDefault();e.stopPropagation();enter();}};
@@ -2129,12 +2133,35 @@ const REAL={loaded:{},want:{earth:{f:['earth_day.jpg','earth_night.jpg','earth_a
   callisto:{f:['callisto.jpg'],m:3,tint:[0.80,0.74,0.67],gap:[0,0.90]},enceladus:{f:['enceladus.jpg'],m:3},titania:{f:['titania.jpg'],m:3,tint:[1.0,0.96,0.92],gap:[0.03,0]},
   oberon:{f:['oberon.jpg'],m:3,tint:[1.0,0.95,0.9],gap:[0.03,0]},triton:{f:['triton.jpg'],m:3},phobos:{f:['phobos.jpg'],m:3,tint:[0.62,0.56,0.52]},deimos:{f:['deimos.jpg'],m:3,tint:[0.66,0.60,0.55]},
   jupiter:{f:['jupiter.jpg'],m:4},saturn:{f:['saturn.jpg'],m:4},uranus:{f:['uranus.jpg'],m:4},neptune:{f:['neptune.jpg'],m:4,tint:[0.85,0.95,1.0]},venus:{f:['venus_clouds.jpg','venus_radar.jpg'],m:5}}};
+/* Textures load on demand, not at startup: a body's photo is fetched once it is a few pixels across on screen or is the focus.
+   Files listed in HI exist as 2048 px copies in tex/2k/; the 4096 px originals are used only up close, on desktops whose GPU takes them.
+   Until a photo arrives the generated surface is shown, so nothing waits on these files. */
+REAL.state={};REAL.HI=new Set(['earth_day.jpg','earth_night.jpg','earth_aux.jpg','moon_color.jpg','jupiter.jpg','saturn.jpg','neptune.jpg']);
+REAL.big=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').matches&&renderer.capabilities.maxTextureSize>=8192;
 (()=>{const loader=new THREE.TextureLoader(),maxA=renderer.capabilities.getMaxAnisotropy();
   const get=f=>new Promise((res,rej)=>loader.load('tex/'+f,t=>{t.wrapS=THREE.RepeatWrapping;t.wrapT=THREE.ClampToEdgeWrapping;t.anisotropy=maxA;t.minFilter=THREE.LinearMipmapLinearFilter;t.needsUpdate=true;res(t);},undefined,()=>rej(new Error(f))));
-  Object.keys(REAL.want).forEach(k=>{const W=REAL.want[k];Promise.all(W.f.map(get)).then(tx=>{const b=bodies[k];if(!b)return;const u=b.mesh.material.uniforms;if(W.tint)u.uTint.value.set(...W.tint);if(W.gap)u.uGap.value.set(...W.gap);
+  const apply=(k,W,tx)=>{const b=bodies[k];if(!b)return;const u=b.mesh.material.uniforms;if(W.tint)u.uTint.value.set(...W.tint);if(W.gap)u.uGap.value.set(...W.gap);
+      const old=[u.uMapA.value,u.uMapB.value,u.uMapC.value];
       u.uMapA.value=tx[0];if(tx[1])u.uMapB.value=tx[1];if(tx[2])u.uMapC.value=tx[2];u.uReal.value=W.m;
       if(k==='earth'){b.extras.forEach((cm,i)=>{if(i===0){cm.material.uniforms.uMapC.value=tx[2];cm.material.uniforms.uReal.value=1;}else cm.visible=false;});}
-      REAL.loaded[k]=true;}).catch(()=>{});});
+      // a sharper set replaces a softer one: free the old photos (generated surfaces are not THREE.Texture photos from this loader)
+      if(REAL.state[k]===4)old.forEach(t=>{if(t&&t.isTexture&&!tx.includes(t)&&t.__real)t.dispose();});
+      tx.forEach(t=>t.__real=true);REAL.loaded[k]=true;};
+  // 1: load the 2048 set (or the only size there is); 3: load the 4096 set. state 2 = soft set in place, 4 = sharp set in place
+  REAL.load=(k,sharp)=>{const W=REAL.want[k],st=REAL.state[k]||0;if(!W)return;
+    if(!sharp&&st)return;if(sharp&&(st!==2||!W.f.some(f=>REAL.HI.has(f))))return;
+    REAL.state[k]=sharp?3:1;
+    Promise.all(W.f.map(f=>get(!sharp&&REAL.HI.has(f)?'2k/'+f:f))).then(tx=>{REAL.state[k]=sharp?4:2;apply(k,W,tx);}).catch(()=>{REAL.state[k]=sharp?2:0;});};
+  // how many pixels the body's radius covers on screen
+  const _bp=new V3(),_bs=new V3();
+  const pxRadius=b=>{b.mesh.getWorldPosition(_bp);const d=camera.position.distanceTo(_bp);if(!(d>0))return 1e9;
+    const r=b.mesh.getWorldScale(_bs).x;return r/d/Math.tan(camera.fov*Math.PI/360)*(renderer.domElement.clientHeight||innerHeight)/2;};
+  let next=0;
+  REAL.tick=now=>{if(now<next)return;next=now+250;
+    for(const k in REAL.want){const b=bodies[k];if(!b||!b.mesh)continue;const st=REAL.state[k]||0;if(st===4||st===1||st===3)continue;
+      const focus=C.focus===b;if(!focus&&!b.mesh.visible)continue;const px=pxRadius(b);
+      if(!st&&(focus||px>6))REAL.load(k,false);
+      else if(st===2&&REAL.big&&px>450)REAL.load(k,true);}};
 })();
 /* ================= REAL-DATA LAYERS =================
    Small bodies (asteroids, comets, dwarf planets, interstellar visitors), meteor showers along Earth's orbit,
@@ -3186,8 +3213,10 @@ function lofted(rows,cols,fn,flip){const pos=[],uv=[],idx=[];for(let j=0;j<=rows
   const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();return g;}
 const rr=(path,x,y,w,h,r)=>{path.moveTo(x+r,y);path.lineTo(x+w-r,y);path.quadraticCurveTo(x+w,y,x+w,y+r);path.lineTo(x+w,y+h-r);path.quadraticCurveTo(x+w,y+h,x+w-r,y+h);path.lineTo(x+r,y+h);path.quadraticCurveTo(x,y+h,x,y+h-r);path.lineTo(x,y+r);path.quadraticCurveTo(x,y,x+r,y);};
 const deckLoader=new THREE.TextureLoader();
+// the cockpit photos are not needed on the title screen: fetch them once the visitor is in, when the browser is idle
+const afterEntry=f=>{const go=()=>(window.requestIdleCallback||setTimeout)(f,{timeout:4000});if(!window.__intro)go();else addEventListener('cosmossian:entered',go,{once:true});};
 function photoMat(file,opts){const m=new THREE.MeshStandardMaterial(Object.assign({color:0x5f646c,roughness:0.62,metalness:0.12},opts||{}));DECKM.push(m);
-  deckLoader.load('deck/'+file,t=>{t.anisotropy=renderer.capabilities.getMaxAnisotropy();m.map=t;m.color.set(0xffffff);m.emissiveMap=t;m.emissive.set(0x2a3038);m.needsUpdate=true;},undefined,()=>{});return m;}
+  afterEntry(()=>deckLoader.load('deck/'+file,t=>{t.anisotropy=renderer.capabilities.getMaxAnisotropy();m.map=t;m.color.set(0xffffff);m.emissiveMap=t;m.emissive.set(0x2a3038);m.needsUpdate=true;},undefined,()=>{}));return m;}
 const paintGrey=new THREE.MeshStandardMaterial({color:0x3a3f47,roughness:0.75,metalness:0.15,emissive:0x1b1e23,emissiveIntensity:1});
 const paintDark=new THREE.MeshStandardMaterial({color:0x24272d,roughness:0.9,metalness:0.05,emissive:0x101216,emissiveIntensity:1});
 const hullGrey=new THREE.MeshStandardMaterial({color:0x363b43,roughness:0.82,metalness:0.1,emissive:0x1a1d22,emissiveIntensity:1}); // lit to the same level as the photographed panels
@@ -3236,7 +3265,7 @@ const TAB={};const BW=0.391,BH=0.2698,SW=BW*614/852,SH=BH*439/588,GX=BW*(385-426
 const bezelMat=photoMat('crt_bezel.jpg',{roughness:0.55});
 const crtMask=canvasTex(512,366,(g,w,h)=>{g.fillStyle='#000';g.fillRect(0,0,w,h);g.fillStyle='#fff';g.beginPath();rr(g,3,3,w-6,h-6,26);g.closePath();g.fill();});
 const crtGlare=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false});
-deckLoader.load('deck/crt_glass.jpg',t=>{crtGlare.map=t;crtGlare.opacity=0.2;crtGlare.needsUpdate=true;},undefined,()=>{});
+afterEntry(()=>deckLoader.load('deck/crt_glass.jpg',t=>{crtGlare.map=t;crtGlare.opacity=0.2;crtGlare.needsUpdate=true;},undefined,()=>{}));
 function tablet(key,x,z,ry){const c=document.createElement('canvas');c.width=1600;c.height=Math.round(1600*SH/SW);const t=new THREE.CanvasTexture(c);t.anisotropy=8;
   const unit=new THREE.Group();unit.position.set(x,0.035,z);unit.rotation.y=ry;
   const box=new THREE.Mesh(new THREE.BoxGeometry(BW,BH,0.03),paintGrey);box.position.z=-0.0152;unit.add(box);
@@ -3762,6 +3791,7 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt=Math.min(0.1,(now-last)/1000);last=now;
   if(window.__intro){if((frame.held=(frame.held||0)+1)>12)return;} // explorer waits behind the entrance screen
+  REAL.tick(now);
   updateBodies(dt);
   updateTrueScale();
   updateLayers(dt);
