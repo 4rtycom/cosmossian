@@ -2307,19 +2307,52 @@ function updateMeteorites(){if(!metPts)return;const e=bodies.earth;let fade=0;
   e.pivot.getWorldPosition(_w);const d=camera.position.distanceTo(_w)/bR(e);fade=1-sstep(6,14,d);}
   metPts.visible=fade>0.01;if(metPts.visible){metPts.material.uniforms.uFade.value=fade;metPts.material.uniforms.uPR.value=renderer.getPixelRatio();}}
 function updateLayers(dt){updateSmallBodies();showerG.visible=solar.visible&&tier==='solar'&&!TS&&!CK.on&&LF.showers!==false;updateDebris(dt);updateMeteorites();}
-// ISS
+// ISS. A light stand-in is drawn until the station is selected; then NASA's 3D model is fetched (NASA 3D Resources, public domain):
+// the full-detail model (~2.7 million triangles, ~33 MB) on desktops, a lighter one (~175,000 triangles, 0.5 MB) on phones and tablets.
+// The model replaces the stand-in only when it is big enough on screen to matter, so it costs nothing when you are far away.
 const ISS=(()=>{
   const earth=bodies.earth;const g=new THREE.Group();const plane=new THREE.Group();plane.rotation.x=51.64*DEG;earth.tilt.add(plane);plane.add(g);
   const mat=new THREE.MeshStandardMaterial({color:0xd8dde6,metalness:.6,roughness:.35});
   const pan=new THREE.MeshStandardMaterial({color:0x1f3a7a,metalness:.3,roughness:.4,emissive:0x07112a});
-  const s=new THREE.Group();
-  s.add(new THREE.Mesh(new THREE.BoxGeometry(1.0,.06,.06),mat));
-  const mod=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,.5,16),mat);mod.rotation.x=Math.PI/2;s.add(mod);
-  [-.45,-.3,.3,.45].forEach(x=>{const p=new THREE.Mesh(new THREE.BoxGeometry(.12,.005,.55),pan);p.position.set(x,0,0);s.add(p);});
+  const s=new THREE.Group(),ph=new THREE.Group();s.add(ph);
+  ph.add(new THREE.Mesh(new THREE.BoxGeometry(1.0,.06,.06),mat));
+  const mod=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,.5,16),mat);mod.rotation.x=Math.PI/2;ph.add(mod);
+  [-.45,-.3,.3,.45].forEach(x=>{const p=new THREE.Mesh(new THREE.BoxGeometry(.12,.005,.55),pan);p.position.set(x,0,0);ph.add(p);});
   s.scale.setScalar(earth.R*0.012);g.add(s);g.userData={angle:0,r:earth.R*1.066};
-  addLabel('ISS',s,'moon',()=>(tier==='solar'||(tier==='surface'&&active==='sol'))&&nearParent(earth,TS?80:14),'','spacecraft').pick={type:'body',key:'earth'};
-  return {g,s};
+  const hit=new THREE.Mesh(SPHERE_LO,HIT_MAT);hit.scale.setScalar(0.6);hit.userData.pick={type:'iss',key:'iss'};s.add(hit);
+  addLabel('ISS',s,'moon',()=>(tier==='solar'||(tier==='surface'&&active==='sol'))&&nearParent(earth,TS?80:14)&&!(C.focus===F&&C.alt<F.R*6),'','spacecraft').pick={type:'iss',key:'iss'};
+  // what the camera needs to treat the station like a body it can orbit (R: half the station's length, in scene units)
+  const _w=new V3();
+  const F={key:'iss',kind:'craft',name:'International Space Station',pivot:s,tilt:s,spin:0,parent:earth,hit,moons:[],Rkm:0.0545,get R(){return s.getWorldScale(_w).x*0.5;}};
+  const lite=!(matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').matches&&renderer.capabilities.maxTextureSize>=8192);
+  let model=null,state=0;
+  const script=src=>new Promise((res,rej)=>{if(document.querySelector('script[data-src="'+src+'"]'))return res();const e=document.createElement('script');e.dataset.src=src;e.src=src;e.onload=res;e.onerror=()=>rej(new Error(src));document.head.appendChild(e);});
+  function load(){if(state)return;state=1;const what=lite?'NASA\u2019s ISS model':'NASA\u2019s ultra-detailed ISS model';toast('Loading '+what+'\u2026',60000);
+    script('lib/three/GLTFLoader.js').then(()=>script('lib/three/DRACOLoader.js')).then(()=>{
+      const man=new THREE.LoadingManager();let pct=0;man.onProgress=(u,l,t)=>{const v=Math.round(l/t*100);if(t>2&&v>pct){pct=v;toast('Loading '+what+'\u2026 '+v+'%',60000);}};
+      const dl=new THREE.DRACOLoader(man);dl.setDecoderPath('lib/draco/');const gl=new THREE.GLTFLoader(man);gl.setDRACOLoader(dl);
+      gl.load(lite?'models/iss-lite.glb':'models/iss-hd/iss.gltf',gltf=>{
+        const root=gltf.scene,box=new THREE.Box3().setFromObject(root),size=box.getSize(new V3()),c=box.getCenter(new V3());
+        root.position.sub(c);const w=new THREE.Group();w.add(root);
+        // the truss is the station's longest dimension: lay it along x, like the stand-in
+        if(size.z>size.x&&size.z>=size.y)w.rotation.y=Math.PI/2;else if(size.y>size.x&&size.y>size.z)w.rotation.z=Math.PI/2;
+        w.scale.setScalar(1/Math.max(size.x,size.y,size.z));
+        root.traverse(o=>{if(o.isMesh&&o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(m.map)m.map.anisotropy=renderer.capabilities.getMaxAnisotropy();});}});
+        w.visible=false;s.add(w);model=w;state=2;dl.dispose();toast('ISS: NASA 3D model'+(lite?'':' (full detail)'),2400);
+      },undefined,()=>{state=0;toast('The ISS model could not be loaded. Showing the simple version.',3200);});
+    }).catch(()=>{state=0;toast('The ISS model could not be loaded. Showing the simple version.',3200);});}
+  // swap stand-in and model by on-screen size
+  const _p=new V3();
+  function tick(){if(!model)return;s.getWorldPosition(_p);const d=camera.position.distanceTo(_p);
+    const px=d>0?F.R/d/Math.tan(camera.fov*Math.PI/360)*(renderer.domElement.clientHeight||innerHeight)/2:1e9;
+    const show=px>20;if(model.visible!==show){model.visible=show;ph.visible=!show;}}
+  return {g,s,F,load,tick};
 })();
+function flyToISS(){
+  if(CK.on){toast('Leave the cockpit to visit the ISS',3000);return;}
+  ISS.load();select({type:'iss',key:'iss'});tier='surface';
+  const R=ISS.F.R;focusBody(ISS.F,{ground:false,alt:R*2.4,dur:2.6});C.minAlt=R*0.9;C.maxAlt=R*60;applyTierUI();
+}
 Object.values(bodies).forEach(b=>{if(b.label)b.label.pick={type:'body',key:b.key};});
 let astPts=null;
 // Asteroid belt
@@ -2400,7 +2433,8 @@ function applyTierUI(){
   const gx=tier==='galaxy'&&galFocus!=='mw'?UGAL[galFocus].G:null;
   const bhT=tier==='bh'&&BHS[bhKey]?{badge:'True scale · Black hole',title:BHS[bhKey].name,sub:'Gravity bends the light of the disk: its far side appears lifted above and below the black shadow.'}:null;
   const nbT=tier==='neb'&&NEB?{badge:'Nebula',title:NEB.name,sub:NEB.cls+'. A model of its glowing gas, dust and stars, built from its class. Not a photograph.'}:null;
-  const t=nbT?nbT:bhT?bhT:gx?{badge:'Tier 3 · Galactic',title:gx[1],sub:gx[2]+'. Modelled from its type and size, with notable features labelled.'}:tier==='galaxy'?{badge:'Tier 3 · Galactic',title:'Milky Way Galaxy',sub:'Barred spiral of 100–400 billion stars, with black holes, supernova remnants and nebulae at their real positions. Zoom toward the Sun to see them.'}:tier==='exo'?{badge:'Tier 1 · Orbital',title:active+' System',sub:(COMP[active]?'Multiple-star system: companions on their real orbital periods, distances compressed.'+(EXO[active]?' Planets shown too.':''):(EXO[active]||(CAT[active]&&!STAR_OBJ[active]))?'Known planets on their real orbital periods. Distances are compressed; surfaces are artist\'s impressions.':'No confirmed planets. Zoom in to see the star\'s surface.')}:TIERS[tier];
+  const isT=tier==='surface'&&typeof ISS!=='undefined'&&C.focus===ISS.F?{badge:'Spacecraft · NASA 3D model',title:'International Space Station',sub:'NASA\u2019s 3D model of the station, about 109 m across. Its position along the orbit is simulated.'}:null;
+  const t=isT?isT:nbT?nbT:bhT?bhT:gx?{badge:'Tier 3 · Galactic',title:gx[1],sub:gx[2]+'. Modelled from its type and size, with notable features labelled.'}:tier==='galaxy'?{badge:'Tier 3 · Galactic',title:'Milky Way Galaxy',sub:'Barred spiral of 100–400 billion stars, with black holes, supernova remnants and nebulae at their real positions. Zoom toward the Sun to see them.'}:tier==='exo'?{badge:'Tier 1 · Orbital',title:active+' System',sub:(COMP[active]?'Multiple-star system: companions on their real orbital periods, distances compressed.'+(EXO[active]?' Planets shown too.':''):(EXO[active]||(CAT[active]&&!STAR_OBJ[active]))?'Known planets on their real orbital periods. Distances are compressed; surfaces are artist\'s impressions.':'No confirmed planets. Zoom in to see the star\'s surface.')}:TIERS[tier];
   $('#tierBadge').textContent=t.badge;$('#title').textContent=t.title;$('#subtitle').textContent=t.sub;
   document.querySelectorAll('.ladder button').forEach(b=>b.classList.toggle('on',b.dataset.tier===(tier==='exo'?'solar':tier)));
   const sys=tier==='solar'||tier==='exo'||tier==='surface';
@@ -2575,6 +2609,7 @@ function telemetry(){
   }else if(s.type==='star'){
     if(s.key==='Sun')setMetrics([['DISTANCE','0 ly','origin of this map'],['SPECTRAL TYPE','G2V',''],['LUMINOSITY','1 L☉',''],['PLANETS','8','plus dwarf planets']]);
     else{const d=STARS.find(x=>x[0]===s.key);setMetrics([['DISTANCE',fmt(d[3],d[3]<100?2:0)+' ly',fmt(d[3]*0.3066,2)+' pc'],['SPECTRAL TYPE',d[4],''],['LUMINOSITY',(d[5]<0.01?d[5].toExponential(1):fmt(d[5],d[5]<10?2:0))+' L☉',''],['PLANETS',d[6],d[7]===1?'habitable-zone planet':d[7]===2?'possible HZ planet':'']]);}
+  }else if(s.type==='iss'){setMetrics([['SIZE','109 × 73 m','truss × solar arrays'],['MASS','≈ 450 t',''],['ALTITUDE','≈ 400–420 km','above Earth'],['SPEED','7.66 km/s','one orbit ≈ 92 min']]);
   }else{
     const b=bodies[s.key];
     if(b===SUN)setMetrics([['RADIUS','695,700 km','109 × Earth'],['GALACTIC ORBIT','26,000 ly','from Sgr A*'],['ORBIT PERIOD','~230 Myr','one galactic year'],['VELOCITY','~230 km/s','around the galaxy']]);
@@ -2625,6 +2660,7 @@ function teleMore(s){const el=$('#tMore');if(!el)return;let rows=[],extra='';
   if(s.type==='star'||s.type==='cat'){const I=starInfo(s.key);if(I){rows=starRows(I.o);const sd=starDisc(s.key,I.o);if(sd)rows.push(['Discovered',sd]);extra=planetTable(s.key,I.pl);}}
   else if(s.type==='hyg'||s.type==='dso'||s.type==='con'){rows=skyRows(s);}
   else if(s.type==='sb'&&SB[s.key]){const o=SB[s.key];if(o[11])rows.push(['Discovered',o[11]+(o[10]?' · '+o[10]:'')]);}
+  else if(s.type==='iss'){rows=[['First module','Zarya, launched 20 November 1998'],['Crewed since','2 November 2000'],['Partners','NASA, Roscosmos, ESA, JAXA, CSA'],['Orbit inclination','51.6°'],['3D model','NASA 3D Resources (public domain)']];}
   else if(s.type==='body'&&bodies[s.key]){const b=bodies[s.key];
     if(b.kind==='star'&&!b.comp){const I=starInfo(b===SUN?'Sun':b.name);if(I){rows=starRows(I.o);const sd=starDisc(b.name,I.o);if(sd&&b!==SUN)rows.push(['Discovered',sd]);if(b!==SUN)extra=planetTable(b.name,I.pl);}
       if(b===SUN)rows.push(['Mass','1.989 × 10³⁰ kg · 333,000 × Earth'],['Surface gravity','274 m/s² · 28 g'],['Rotation','25 days at the equator'],['Age','4.6 billion years'],['Composition','73% hydrogen, 25% helium (by mass)']);}
@@ -2660,6 +2696,9 @@ function select(s){
   else if(s.type==='star'){if(s.key==='Sun'){name='Sun';cls='Our star · G2V';color='#ffe9a8';desc='Click the Sun again or keep scrolling in to enter the Solar System.';}
     else{const d=STARS.find(x=>x[0]===s.key);name=d[0];cls='Star · '+d[4];color=SPEC_COL[d[4][0]];desc=d[8];}
     chips=[`<button class="chip enter" type="button" data-enter="${s.key.replace(/"/g,'')}">${s.key==='Sun'?'Enter the Solar System':(EXO[s.key]?'Enter the '+s.key+' system ('+EXO[s.key].length+' planets)':CATX[s.key]&&CATX[s.key].pl.length?'Enter the '+s.key+' system ('+CATX[s.key].pl.length+' planet'+(CATX[s.key].pl.length>1?'s':'')+')':COMP[s.key]?'Enter the '+s.key+' system ('+(COMP[s.key].length+1)+' stars)':'Fly to '+s.key)} →</button>`];}
+  else if(s.type==='iss'){name='International Space Station';cls='Space station · low Earth orbit';color='#d8dde6';
+    desc='The largest structure people have built in space, crewed without a break since November 2000 and run by the space agencies of the USA, Russia, Europe, Japan and Canada. It circles Earth about every 92 minutes, so its crew sees around 16 sunrises a day. Drag to orbit it; scroll to come closer.';
+    chips=['<button class="chip" type="button" data-body="earth">↑ Earth</button>'];}
   else{const b=bodies[s.key];name=b.name;cls=b.cls;color=b.color;desc=b.desc;
     const list=b.kind==='star'&&!b.comp?(b===SUN?planetList:exoBodies.concat(exoComps)):b.comp?[b.parentStar]:b.kind==='planet'?b.moons:b.kind==='moon'?[b.parent]:null;if(list)chips=list.map(m=>`<button class="chip" type="button" data-body="${m.key}">${b.kind==='moon'||b.comp?'↑ ':''}${m.exo?m.letter:m.name}${m.hz===1?' · HZ':''}</button>`);}
   $('#tName').textContent=name;$('#tClass').textContent=cls;$('#tDesc').textContent=desc;
@@ -2715,6 +2754,7 @@ function goFocus(v){const f=$('#focus'),i=v.indexOf(':'),t=v.slice(0,i),k=v.slic
       else fadeTo(()=>{enterExo(n);C.alt=C.gAlt;C.flight=null;scene.updateMatrixWorld(true);updateCamera(0.016);flyToBody(bodies[key]);});f.blur();return;}
     if(t==='gal'){const go=()=>{if(k==='sgra'){select({type:'gal',key:'sgra'});C.gFixed.set(0,0,0);C.gAlt=420;}};if(!inMW())fadeTo(()=>{enterGalaxy(false);go();});else{select({type:'gal',key:k});go();if(k==='milkyway')resetView();}}
     else if(t==='star'){const go=()=>pickStar(k);if(tier!=='neighborhood')fadeTo(()=>{enterHood('galaxy');go();});else go();}
+    else if(t==='iss'){if((tier==='solar'||tier==='surface')&&active==='sol')flyToISS();else fadeTo(()=>{enterSolar();C.alt=C.gAlt=120;C.flight=null;updateCamera(0.016);flyToISS();});}
     else{const b=bodies[k];if((tier==='solar'||tier==='surface')&&active==='sol')flyToBody(b);else fadeTo(()=>{enterSolar();C.alt=C.gAlt=120;C.flight=null;updateCamera(0.016);flyToBody(b);});}
     f.blur();}
 function pickStar(k){select({type:'star',key:k});const o=STAR_OBJ[k];C.gFixed.copy(o.position);C.gAlt=k==='Sun'?60:22;}
@@ -2780,6 +2820,7 @@ function pick(x,y){
 }
 function handlePick(pk){
   if(fading||!pk)return;
+  if(pk.type==='iss'){flyToISS();return;}
   if(pk.type==='sb'){selectSB(pk.key);return;}if(pk.type==='shower'){select({type:'shower',key:pk.key});return;}if(pk.type==='hyg'||pk.type==='dso'||pk.type==='con'){const again=selected&&selected.type===pk.type&&selected.key===pk.key;if(again&&pk.type==='dso'){if(isNebType(SKY.dso[pk.key][2])){goFocus('neb:dso:'+pk.key);return;}const gk=dsoGalaxy(SKY.dso[pk.key]);if(gk){goFocus('ugal:'+gk);return;}}select(pk);if(pk.type==='dso'&&isNebType(SKY.dso[pk.key][2]))toast('Click it again, or use the arrow on its card, to fly into this nebula',3400);else if(pk.type==='dso'&&dsoGalaxy(SKY.dso[pk.key]))toast('Click it again, or use the arrow on its card, to fly to this galaxy',3200);return;}
   if(pk.type==='mwo'&&selected&&selected.type==='mwo'&&selected.key===pk.key&&GAL.objs[pk.key]&&mwoIsNeb(GAL.objs[pk.key].o)&&tier!=='neb'){goFocus('neb:mwo:'+pk.key);return;}
   if(pk.type==='sky'){const was=selected&&selected.key===pk.key;pk={type:STAR_OBJ[pk.key]?'star':'cat',key:pk.key};
@@ -2839,6 +2880,7 @@ addEventListener('keydown',e=>{if(e.key==='Escape')$('#help').hidden=true;if(e.t
 // one line that always says what you can do next
 function updateHint(){const el=$('#hint');if(!el)return;let t='';const s=selected;
   if(tier==='solar'||tier==='exo')t='<b>Click</b> a planet or its name to fly there · <b>drag</b> to rotate · <b>scroll</b> to zoom, and keep scrolling out to reach the stars';
+  else if(tier==='surface'&&typeof ISS!=='undefined'&&C.focus===ISS.F)t='<b>Drag</b> to circle the station · <b>scroll</b> to come closer or pull away · <b>Esc</b> returns to the whole system';
   else if(tier==='surface')t='<b>Scroll in</b> to descend to the ground · <b>drag</b> to move across the surface · <b>Esc</b> returns to the whole system';
   else if(tier==='neighborhood')t=s&&(s.type==='star'||s.type==='cat')&&s.key!=='Sun'?'<b>Click '+s.key+' again</b>, or use the Enter button in the panel, to fly into its system':'<b>Click</b> a star to select it · <b>click it again</b> to enter its system · scroll out for the whole galaxy';
   else if(tier==='galaxy')t=galFocus==='mw'?'<b>Click</b> any marker to learn about it · select “You are here” and <b>scroll in</b> for the Sun’s neighbourhood':'<b>Click</b> a marker to learn about it · <b>scroll out</b> to return to the Universe';
@@ -2859,7 +2901,7 @@ const SEARCH=(()=>{const L=[];const add=(v,n,sub)=>L.push({v,n,sub,k:n.toLowerCa
   GALAXIES.forEach(G=>{const m=/^Messier (\d+)/.exec(G[1]);if(m)add('ugal:'+G[0],'M'+m[1],G[1]);const pm=/\((M\d+|NGC \d+)\)/.exec(G[1]);if(pm)add('ugal:'+G[0],pm[1],G[1]);});
   Object.keys(BHS).forEach(k=>{const f=BHS[k].from;add((f.type==='gal'?'gal:':f.type+':')+f.key,BHS[k].name,'black hole');});
   SB.forEach((o,i)=>add('sb:'+i,sbName(o),(SBT[o[1]]||o[1]).toLowerCase()));SHOWERS.forEach(w=>add('shower:'+w[0],w[1],'meteor shower · '+sunLonDate(w[5])));
-  add('gal:milkyway','Milky Way centre','our galaxy');add('body:earth','ISS','space station · orbits Earth');
+  add('gal:milkyway','Milky Way centre','our galaxy');add('iss:iss','ISS','space station · orbits Earth');add('iss:iss','International Space Station','space station · orbits Earth');
   return L;})();
 $('#search').placeholder=`Search planets, ${fmt(N_CAT_PL)} exoplanets, stars, galaxies, black holes…`;
 /* ================= REAL SKY: measured stars, constellations and deep-sky objects =================
@@ -3791,7 +3833,7 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt=Math.min(0.1,(now-last)/1000);last=now;
   if(window.__intro){if((frame.held=(frame.held||0)+1)>12)return;} // explorer waits behind the entrance screen
-  REAL.tick(now);
+  REAL.tick(now);ISS.tick();
   updateBodies(dt);
   updateTrueScale();
   updateLayers(dt);
