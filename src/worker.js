@@ -10,19 +10,41 @@ const SB_ASTEROID_MAX_H = 11;   // numbered asteroids brighter than this absolut
 const SB_COMET_MAX_Q = 3;       // comets that come closer to the Sun than this (AU)
 const UA = 'Cosmossian/1.0 (+https://cosmossian.com)';
 
+const CANONICAL = 'cosmossian.com';
+
+// security headers on every response the Worker sends (files served straight from ./public get the same set from public/_headers)
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "connect-src 'self' https://cloudflareinsights.com",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+  "upgrade-insecure-requests"
+].join('; ');
+const SECURITY_HEADERS = {
+  'Content-Security-Policy': CSP,
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+  'Cross-Origin-Opener-Policy': 'same-origin'
+};
+function secure(res) {
+  const h = new Headers(res.headers);
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) h.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
+
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const p = url.pathname;
-    if (p === '/api/health') return health(env);
-    if (p === '/api/refresh') {
-      if (!env.REFRESH_KEY || url.searchParams.get('key') !== env.REFRESH_KEY) return new Response('forbidden', { status: 403 });
-      const only = url.searchParams.get('only');
-      const out = await refreshAll(env, only ? only.split(',') : null);
-      return json(out);
-    }
-    if (p === '/' || p === '/index.html') return page(request, env);
-    return env.ASSETS.fetch(request);
+    return secure(await route(request, env, ctx));
   },
   async scheduled(event, env, ctx) {
     // every run refreshes satellites; exoplanets once a day; small bodies once a week
@@ -34,6 +56,42 @@ export default {
   }
 };
 
+async function route(request, env, ctx) {
+  const url = new URL(request.url);
+  const p = url.pathname;
+  const m = request.method;
+  // one address for the site: www goes to the bare domain
+  if (url.hostname === 'www.' + CANONICAL) { url.hostname = CANONICAL; return Response.redirect(url.toString(), 301); }
+  if (p.startsWith('/api/')) {
+    const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+    if (env.API_LIMIT && !(await env.API_LIMIT.limit({ key: 'api:' + ip })).success) return text('too many requests', 429, { 'Retry-After': '60' });
+    if (p === '/api/health') return m === 'GET' || m === 'HEAD' ? health(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
+    if (p === '/api/refresh') {
+      if (m !== 'GET' && m !== 'POST') return text('method not allowed', 405, { Allow: 'GET, POST' });
+      if (env.REFRESH_LIMIT && !(await env.REFRESH_LIMIT.limit({ key: 'refresh:' + ip })).success) return text('too many requests', 429, { 'Retry-After': '60' });
+      // the key may come as "Authorization: Bearer <key>" (preferred: stays out of logs) or as ?key=
+      const auth = request.headers.get('authorization') || '';
+      const given = auth.startsWith('Bearer ') ? auth.slice(7) : (url.searchParams.get('key') || '');
+      if (!(await sameSecret(given, env.REFRESH_KEY))) return text('forbidden', 403);
+      const only = url.searchParams.get('only');
+      return json(await refreshAll(env, only ? only.split(',') : null));
+    }
+    return text('not found', 404);
+  }
+  if (m !== 'GET' && m !== 'HEAD') return text('method not allowed', 405, { Allow: 'GET, HEAD' });
+  if (p === '/' || p === '/index.html') return page(request, env);
+  return env.ASSETS.fetch(request);
+}
+
+// constant-time comparison, so the key cannot be guessed from response timing
+async function sameSecret(given, secret) {
+  if (!secret || secret.length < 24 || !given) return false;
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([given, secret].map(s => crypto.subtle.digest('SHA-256', enc.encode(s))));
+  return crypto.subtle.timingSafeEqual(a, b);
+}
+const text = (body, status, extra) => new Response(body, { status, headers: Object.assign({ 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }, extra || {}) });
+
 /* ---------- the page, with live data written in ---------- */
 async function page(request, env) {
   // ask the asset store for '/' (asking for /index.html would answer with a redirect back to '/')
@@ -41,7 +99,10 @@ async function page(request, env) {
   if (!res.ok || !(res.headers.get('content-type') || '').includes('text/html')) return res;
   if (!env.LIVE) return res;
   const [sats, exo, sb, meta] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta'].map(k => env.LIVE.get(k)));
-  const put = (id, val) => ({ element(el) { if (val) el.setInnerContent(val, { html: false }); } });
+  // the stored blocks are JSON from outside feeds. Inside a <script> tag, HTML escaping would corrupt them, and raw "<" could close
+  // the tag and inject markup. So <, > and & are written as JSON \u escapes: still the same JSON, but it can never leave the tag.
+  const safe = s => s.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  const put = (id, val) => ({ element(el) { if (val) el.setInnerContent(safe(val), { html: true }); } });
   const out = new HTMLRewriter()
     .on('script#debris', put('debris', sats))
     .on('script#exocat', put('exocat', exo))
