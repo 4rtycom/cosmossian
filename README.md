@@ -96,6 +96,8 @@ curl https://cosmossian.com/api/health
 | `/`, `/index.html` | HTML with live KV blocks written in |
 | `/api/health` | JSON status |
 | `/api/refresh` | refresh; requires `REFRESH_KEY` |
+| `/api/verify` | POST a Turnstile token; sets the human-check cookie |
+| `/api/human` | JSON `{ "human": true/false }` for the current visitor |
 | everything else | static file from `public/` |
 
 `wrangler.toml` lists custom domains `cosmossian.com` and `www.cosmossian.com`. Publishing with those routes attaches the Worker to those hostnames. This repository does not change DNS by itself.
@@ -106,6 +108,7 @@ curl https://cosmossian.com/api/health
 - `www.cosmossian.com` redirects to `cosmossian.com`.
 - `/api/*` is rate limited per visitor (`API_LIMIT`, 30 per minute; `REFRESH_LIMIT`, 3 per minute) and only accepts the methods it uses.
 - The refresh key is compared in constant time.
+- Human check: the title screen runs Cloudflare Turnstile (widget "Cosmossian title screen", managed mode, invisible unless Cloudflare is unsure). "Explore the Galaxy" stays locked until the Worker has verified the token with Siteverify (checking action `intro` and hostname `cosmossian.com`). The Worker then sets `__Host-cs_human`, an HMAC-signed HttpOnly cookie, valid 30 days, so returning visitors are not checked again. `#explore` links also wait for the check. This gates the interface; the static files under `public/` stay publicly fetchable.
 - Live data written into the page is escaped so a feed can never break out of its `<script>` tag.
 - Zone-level protection (SSL mode, WAF, bots, DDoS) is set in the Cloudflare dashboard, not in this repository.
 
@@ -133,6 +136,7 @@ Create or confirm these in the Cloudflare account. This repo does not contain th
 | `LIVE` | Workers KV namespace `cosmossian-LIVE` (created; id in `wrangler.toml`) |
 | `API_LIMIT`, `REFRESH_LIMIT` | rate limiting bindings (declared in `wrangler.toml`) |
 | `REFRESH_KEY` | Worker secret (`wrangler secret put`) |
+| `TURNSTILE_SECRET` | Worker secret: secret key of the Turnstile widget "Cosmossian title screen" (site key is in `public/index.html`) |
 | `ASSETS` | assets binding for `./public` (declared in `wrangler.toml`) |
 | Worker name `cosmossian` | Workers script |
 | Cron trigger `7 */3 * * *` | scheduled trigger declared in `wrangler.toml` |
@@ -141,7 +145,7 @@ Create or confirm these in the Cloudflare account. This repo does not contain th
 
 ## Secrets
 
-`REFRESH_KEY` is the only secret the Worker reads. Keep it in `.dev.vars` locally and in the Cloudflare secret store for the deployed Worker. Do not commit `.env`, `.dev.vars`, or a filled-in key.
+The Worker reads two secrets: `REFRESH_KEY` and `TURNSTILE_SECRET`. Keep it in `.dev.vars` locally and in the Cloudflare secret store for the deployed Worker. Do not commit `.env`, `.dev.vars`, or a filled-in key.
 
 ## Credits
 
