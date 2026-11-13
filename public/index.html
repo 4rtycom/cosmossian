@@ -1690,33 +1690,42 @@ function buildGalaxyX(key){
    Photon paths use d²x/dλ² = −1.5 h² x / r⁵, which reproduces the photon sphere (1.5 Rs) and the shadow (~2.6 Rs).
    The accretion disk runs from the innermost stable orbit (3 Rs) outward, with Doppler beaming and gravitational redshift. */
 const BHS={
- sgra:{name:'Sagittarius A*',M:4.3e6,disk:0.35,from:{type:'gal',key:'sgra'},note:'Our galaxy\'s central black hole. It feeds slowly, so its disk is faint. Imaged by the Event Horizon Telescope in 2022.'},
- cygx1:{name:'Cygnus X-1',M:21,disk:0.8,from:{type:'mwo',key:'cygx1'},note:'Gas pulled from its blue-supergiant companion forms a hot X-ray-bright disk.'},
+ sgra:{name:'Sagittarius A*',M:4.3e6,disk:0.35,env:1,from:{type:'gal',key:'sgra'},note:'Our galaxy\'s central black hole. It feeds slowly, so its disk is faint. Imaged by the Event Horizon Telescope in 2022.'},
+ cygx1:{name:'Cygnus X-1',M:21,disk:0.8,jet:0.25,from:{type:'mwo',key:'cygx1'},note:'Gas pulled from its blue-supergiant companion forms a hot X-ray-bright disk.'},
  gaiabh1:{name:'Gaia BH1',M:9.6,disk:0,from:{type:'mwo',key:'gaiabh1'},note:'Dormant: no disk at all. You see it only by how it bends the light of background stars.'},
  gaiabh3:{name:'Gaia BH3',M:33,disk:0,from:{type:'mwo',key:'gaiabh3'},note:'Dormant and dark; it reveals itself only through gravitational lensing and its companion\'s orbit.'},
- v404:{name:'V404 Cygni',M:9,disk:0.9,from:{type:'mwo',key:'v404'},note:'Flares when its disk floods with gas from its companion star.'},
+ v404:{name:'V404 Cygni',M:9,disk:0.9,jet:0.3,from:{type:'mwo',key:'v404'},note:'Flares when its disk floods with gas from its companion star.'},
  a0620:{name:'A0620-00',M:6.6,disk:0.45,from:{type:'mwo',key:'a0620'},note:'A quiet X-ray binary with a faint disk.'},
- ton618:{name:'TON 618',M:4.07e10,disk:0.95,from:{type:'ucl',key:'ton618'},note:'One of the most massive black holes known. Its disk outshines entire galaxies as a quasar.'},
- m87:{name:'M87*',M:6.5e9,disk:0.8,from:{type:'ugal',key:'m87'},note:'The first black hole ever imaged (2019). Its shadow is wider than our Solar System.'},
- cena:{name:'Centaurus A black hole',M:5.5e7,disk:0.7,from:{type:'ugal',key:'cena'},note:'Powers the radio jets of Centaurus A.'},
- m31:{name:'Andromeda\'s black hole (M31*)',M:1.4e8,disk:0.25,from:{type:'ugal',key:'m31'},note:'Sits in Andromeda\'s double nucleus; currently quiet.'},
- m104:{name:'Sombrero black hole',M:1e9,disk:0.4,from:{type:'ugal',key:'m104'},note:'A billion-solar-mass black hole in the Sombrero\'s bulge.'}
+ ton618:{name:'TON 618',M:4.07e10,disk:0.95,env:1,jet:0.8,from:{type:'ucl',key:'ton618'},note:'One of the most massive black holes known. Its disk outshines entire galaxies as a quasar.'},
+ m87:{name:'M87*',M:6.5e9,disk:0.8,env:1,jet:1,from:{type:'ugal',key:'m87'},note:'The first black hole ever imaged (2019). Its shadow is wider than our Solar System.'},
+ cena:{name:'Centaurus A black hole',M:5.5e7,disk:0.7,env:1,jet:0.7,from:{type:'ugal',key:'cena'},note:'Powers the radio jets of Centaurus A.'},
+ m31:{name:'Andromeda\'s black hole (M31*)',M:1.4e8,disk:0.25,env:1,from:{type:'ugal',key:'m31'},note:'Sits in Andromeda\'s double nucleus; currently quiet.'},
+ m104:{name:'Sombrero black hole',M:1e9,disk:0.4,env:1,from:{type:'ugal',key:'m104'},note:'A billion-solar-mass black hole in the Sombrero\'s bulge.'}
 };
 const bhKeyFor=s=>!s?null:s.type==='gal'&&s.key==='sgra'?'sgra':(s.type==='mwo'||s.type==='ucl'||s.type==='ugal')&&BHS[s.key]?s.key:null;
 const SCALE_REFS=[['100 km',100],['1,000 km',1000],['Earth\'s radius',6371],['Moon\'s orbit',384400],['Sun\'s radius',695700],['Mercury\'s orbit',0.387*AU_KM],['Earth\'s orbit',AU_KM],['Jupiter\'s orbit',5.2*AU_KM],['Neptune\'s orbit',30.07*AU_KM],['Voyager 1 (2026)',170*AU_KM],['Inner Oort Cloud',2000*AU_KM]];
 const bhScene=new THREE.Scene(),bhCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
 const BH_FRAG=NOISE+`
-uniform vec2 uRes;uniform vec3 uCamPos;uniform mat3 uCamRot;uniform float uTanHalf,uTime,uDisk,uDiskOut,uSteps;
-vec3 stars(vec3 d){vec3 c=vec3(0.);
- for(int k=0;k<2;k++){float sc=k==0?90.:240.;vec3 q=d*sc;vec3 i=floor(q);vec3 f=fract(q)-0.5;float h=cl_h(i+float(k)*17.);
-  if(h>0.982-float(k)*0.012){vec3 o=(cl_h3(i)-0.5)*0.6;float b=smoothstep(0.22,0.,length(f-o));vec3 t=mix(vec3(1.,.82,.62),vec3(.72,.82,1.),cl_h(i+3.));c+=t*b*(0.6+3.*(h-0.97));}}
- float band=exp(-pow(d.y*0.7+d.x*0.35,2.)*10.);c+=vec3(.22,.2,.27)*band*(0.25+0.75*cl_fbm(d*5.,4.))*0.5;return c;}
-vec3 bbody(float t){t=clamp(t,0.,2.5);return vec3(min(1.,0.25+t*1.1),clamp(0.08+t*0.75,0.,1.),clamp(t*t*0.55-0.05,0.,1.2));}
+uniform vec2 uRes;uniform vec3 uCamPos;uniform mat3 uCamRot;uniform float uTanHalf,uTime,uDisk,uDiskOut,uSteps,uEnv,uJet,uSeed;
+// the sky behind the hole, which its gravity bends: stars, the host galaxy's band with dust lanes and glowing gas, and,
+// for a hole in a galaxy's core (uEnv 1), the glow of billions of crowded stars on every side
+vec3 sky(vec3 d){vec3 c=vec3(0.);
+ for(int k=0;k<3;k++){float sc=k==0?55.:k==1?140.:320.;vec3 q=d*sc;vec3 i=floor(q);vec3 f=fract(q)-0.5;float h=cl_h(i+float(k)*17.+uSeed);
+  float thr=0.962-float(k)*0.014-uEnv*0.03;
+  if(h>thr){vec3 o=(cl_h3(i)-0.5)*0.6;float b=smoothstep(0.24,0.,length(f-o));vec3 t=mix(vec3(1.,.8,.58),vec3(.7,.82,1.),cl_h(i+3.));c+=t*b*(0.45+2.4*(h-thr)/(1.-thr))*(k==2?0.55:1.);}}
+ float lat=d.y*0.94+d.x*0.34;float band=exp(-lat*lat*13.);
+ float dust=smoothstep(0.42,0.72,cl_fbm(d*7.+uSeed,5.))*exp(-lat*lat*55.);
+ vec3 bc=mix(vec3(.55,.48,.42),vec3(.78,.64,.48),cl_fbm(d*3.,4.))*(0.3+0.7*cl_fbm(d*9.,5.));
+ c+=bc*band*(1.-dust*0.85)*(0.13+0.09*uEnv);
+ float neb=smoothstep(0.6,0.9,cl_fbm(d*2.5+vec3(uSeed),5.));
+ c+=mix(vec3(.9,.28,.32),vec3(.28,.55,.95),cl_fbm(d*4.,3.))*neb*band*0.22*(1.-uEnv*0.6);
+ c+=uEnv*vec3(1.,.8,.58)*(0.025+0.06*cl_fbm(d*3.+2.,4.)+0.05*exp(-2.*pow(acos(clamp(dot(d,normalize(vec3(.3,.15,1.))),-1.,1.)),2.)));
+ return c;}
 void main(){
  vec2 uv=(gl_FragCoord.xy-0.5*uRes)/uRes.y*2.0;
  vec3 dir=normalize(uCamRot*vec3(uv.x*uTanHalf,uv.y*uTanHalf,-1.));
  vec3 pos=uCamPos,vel=dir;vec3 hv=cross(pos,vel);float h2=dot(hv,hv);
- float camR=length(uCamPos);float esc=max(camR*1.15,uDiskOut*1.5);
+ float camR=length(uCamPos);float esc=max(camR*1.15,max(uDiskOut*1.5,uJet>0.?60.:0.));
  vec3 col=vec3(0.);float trans=1.;bool escaped=false;
  float gain=0.45+0.55*uDisk;
  for(int i=0;i<420;i++){
@@ -1730,35 +1739,48 @@ void main(){
   if(uDisk>0.){ // faint glowing gas just above and below the thin disk
    float gr=length(pos.xz);float hz=exp(-abs(pos.y)*2.4/(0.22+0.05*gr));
    col+=trans*vec3(1.,.70,.36)*hz*smoothstep(uDiskOut*1.05,4.5,gr)*smoothstep(2.7,3.6,gr)/(1.+0.10*gr*gr)*dt*0.022*gain;}
+  if(uJet>0.){ // relativistic jets along the spin axis: knots of plasma racing outward; the jet coming toward you is beamed brighter
+   float ay=abs(pos.y);if(ay>1.5){float w=0.45+0.1*ay;float rho=length(pos.xz);float core=exp(-rho*rho/(w*w));
+    float knots=0.45+0.55*pow(0.5+0.5*sin(ay*0.42-uTime*2.6+(pos.y>0.?0.:1.7)),3.);
+    float mu=dot(vec3(0.,sign(pos.y),0.),-normalize(vel));float beam=clamp(pow(1./(1.-0.85*mu),2.)*0.12,0.03,1.6);
+    col+=trans*mix(vec3(.5,.7,1.),vec3(.85,.92,1.),core)*core*knots*beam*uJet*smoothstep(1.5,5.,ay)/(1.+0.03*ay)*dt*1.1;}}
   if(prev.y*pos.y<0.){
    float t=prev.y/(prev.y-pos.y);vec3 p=mix(prev,pos,t);float rr=length(p.xz);
+   float om=pow(rr,-1.5)*3.4;float a2=atan(p.z,p.x)-uTime*om;vec2 cs=vec2(cos(a2),sin(a2));
+   float v=sqrt(0.5/rr);vec3 tv=normalize(vec3(-p.z,0.,p.x));vec3 toObs=-normalize(vel);
+   float D=1./((1./sqrt(1.-v*v))*(1.-v*dot(tv,toObs)));float shift=D*sqrt(max(1.-1./rr,0.01));
    if(uDisk>0.&&rr>3.0&&rr<uDiskOut){
-    // thin, optically thick disk in Keplerian rotation; shear draws the gas into fine concentric lanes
-    float om=pow(rr,-1.5)*2.2;float a2=atan(p.z,p.x)-uTime*om;
-    vec2 cs=vec2(cos(a2),sin(a2));
+    // thin, optically thick disk in Keplerian rotation; shear draws the gas into fine lanes, and spiral streams creep inward
     float lanes=cl_fbm(vec3(cs*0.9,rr*5.5),5.);
     float fine=cl_fbm(vec3(cs*2.6+7.3,rr*15.),4.);
     float turb=cl_fbm(vec3(cs*rr*0.45,rr*0.3+3.1),4.);
-    float n=clamp(0.18+0.62*lanes+0.34*fine+0.5*(turb-0.5),0.,1.25);
+    float spiral=0.65+0.7*smoothstep(-0.3,0.9,sin(2.*a2+5.5*log(rr)+uTime*0.9));
+    float n=clamp((0.18+0.62*lanes+0.34*fine+0.5*(turb-0.5))*spiral,0.,1.4);
+    // hot spots: dense clumps orbiting close in, like the flares seen around Sagittarius A*
+    for(int k=0;k<3;k++){float rk=4.2+float(k)*2.3;float ak=uTime*pow(rk,-1.5)*3.4+float(k)*2.1+uSeed;vec2 hp=rk*vec2(cos(ak),sin(ak));
+     n+=1.6*exp(-dot(p.xz-hp,p.xz-hp)/(0.18+0.05*rk))*(0.6+0.4*sin(uTime*0.7+float(k)*1.9));}
     // temperature profile of a thin disk: zero at the innermost stable orbit (3 Rs), peaking just outside it
     float Tn=pow(3.0/rr,0.75)*pow(max(1.-sqrt(3.0/rr),0.0),0.25)*2.05;
-    float v=sqrt(0.5/rr);vec3 tv=normalize(vec3(-p.z,0.,p.x));vec3 toObs=-normalize(vel);
-    float D=1./((1./sqrt(1.-v*v))*(1.-v*dot(tv,toObs)));float shift=D*sqrt(max(1.-1./rr,0.01));
-    float Ts=Tn*mix(1.,shift,0.3);
+    float Ts=Tn*mix(1.,shift,0.35);
     vec3 c=mix(vec3(0.92,0.36,0.10),vec3(1.0,0.66,0.30),smoothstep(0.22,0.6,Ts));c=mix(c,vec3(1.0,0.93,0.82),smoothstep(0.6,1.05,Ts));
-    float I=pow(Tn,1.9)*pow(shift,0.7)*(0.25+1.45*n)*gain*1.15;
+    float I=pow(Tn,1.9)*pow(shift,2.4)*(0.25+1.45*n)*gain*1.05; // Doppler beaming: the side moving toward you is far brighter
     float edge=smoothstep(3.0,3.3,rr)*smoothstep(uDiskOut,uDiskOut*0.5,rr);
     float al=clamp(edge*(0.94+0.2*n),0.,0.992);
     col+=trans*c*I*al;trans*=1.-al;
+   } else if(uDisk>0.&&rr>1.02&&rr<=3.0){
+    // inside the last stable orbit the gas can no longer orbit: thin streams spiral down into the hole, reddened and dimmed by gravity
+    float st=pow(max(0.,sin(2.*a2+9.*log(rr)+uTime*2.2)),5.)*smoothstep(1.02,1.6,rr);
+    float I=st*pow(shift,2.)*0.55*gain*(rr/3.);float al=clamp(st*0.5,0.,0.6);
+    col+=trans*mix(vec3(.75,.18,.06),vec3(1.,.55,.25),smoothstep(1.4,3.,rr))*I;trans*=1.-al*0.5;
    }
   }
  }
- if(escaped)col+=trans*stars(normalize(vel));
+ if(escaped)col+=trans*sky(normalize(vel));
  col=1.-exp(-col*1.35);
  gl_FragColor=vec4(col,1.);
 }`;
 const bhMat=new THREE.ShaderMaterial({vertexShader:'void main(){gl_Position=vec4(position.xy,0.,1.);}',fragmentShader:BH_FRAG,depthTest:false,depthWrite:false,
-  uniforms:{uRes:{value:new THREE.Vector2(1,1)},uCamPos:{value:new V3()},uCamRot:{value:new THREE.Matrix3()},uTanHalf:{value:Math.tan(25*DEG)},uTime:{value:0},uDisk:{value:1},uDiskOut:{value:17},uSteps:{value:300}}});
+  uniforms:{uRes:{value:new THREE.Vector2(1,1)},uCamPos:{value:new V3()},uCamRot:{value:new THREE.Matrix3()},uTanHalf:{value:Math.tan(25*DEG)},uTime:{value:0},uDisk:{value:1},uDiskOut:{value:17},uSteps:{value:300},uEnv:{value:0},uJet:{value:0},uSeed:{value:0}}});
 bhScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),bhMat));
 /* ================= NEBULAE: fly around and through a glowing cloud =================
    A volume model built from each nebula's type: hydrogen glows red, doubly ionised oxygen teal, dust blocks light,
@@ -1887,7 +1909,8 @@ function enterBH(key){
   const inside=SCALE_REFS.filter(r=>r[1]/rs<1.4).slice(-1),outside=SCALE_REFS.filter(r=>r[1]/rs>=1.6&&r[1]/rs<=70).slice(0,3);
   const rings=[...inside.map(r=>[r,1]),...outside.map(r=>[r,0])].slice(0,4);
   const R=[0,0,0,0],I=[0,0,0,0];rings.forEach((x,i)=>{R[i]=x[0][1]/rs;I[i]=x[1];});
-  bhMat.uniforms.uDisk.value=B.disk;
+  bhMat.uniforms.uDisk.value=B.disk;bhMat.uniforms.uDiskOut.value=B.disk>0?14+12*B.disk:17;bhMat.uniforms.uEnv.value=B.env||0;bhMat.uniforms.uJet.value=B.jet||0;
+  bhMat.uniforms.uSeed.value=[...key].reduce((a,ch)=>a+ch.charCodeAt(0),0)%97;
   bhLabels.forEach(b=>{b.o.userData.on=false;});bhRings=rings;
   select({type:'bh',key});
 }
@@ -4019,7 +4042,7 @@ function frame(now){
   const useBloom=ensureBloom();if(useBloom)renderer.setRenderTarget(rtMain);
   if(tier==='neb'){scene.updateMatrixWorld();renderNeb(dt,useBloom?rtMain:null);}
   else if(tier==='bh'){const u=bhMat.uniforms;renderer.getDrawingBufferSize(u.uRes.value);u.uCamPos.value.copy(camera.position);u.uCamRot.value.setFromMatrix4(camera.matrixWorld);
-    u.uTanHalf.value=Math.tan(camera.fov*DEG/2);bhClock+=dt*(0.35+Math.min(rate,50)*0.05);u.uTime.value=bhClock;u.uDiskOut.value=15;u.uSteps.value=quality==='ultra'?400:300;scene.updateMatrixWorld();renderer.render(bhScene,bhCam);}
+    u.uTanHalf.value=Math.tan(camera.fov*DEG/2);bhClock+=dt*(0.6+Math.min(rate,50)*0.05);u.uTime.value=bhClock;u.uSteps.value=quality==='ultra'?400:300;scene.updateMatrixWorld();renderer.render(bhScene,bhCam);}
   else renderer.render(scene,camera);
   if(CK.on)cockpitRender(dt);
   G_EXP.value+=((tier==='universe'?0.62:1)-G_EXP.value)*Math.min(1,dt*3);
