@@ -153,7 +153,11 @@ async function page(request, env) {
   const res = await env.ASSETS.fetch(new Request(new URL('/', request.url), request));
   if (!res.ok || !(res.headers.get('content-type') || '').includes('text/html')) return res;
   if (!env.LIVE) return res;
-  const [sats, exo, sb, meta, iss, space] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta', 'block:iss', 'block:space'].map(k => env.LIVE.get(k)));
+  const [sats, exo, sb, iss, space, metaObj] = await Promise.all([
+    env.LIVE.get('block:debris'), env.LIVE.get('block:exocat'), env.LIVE.get('block:smallbodies'),
+    env.LIVE.get('block:iss'), env.LIVE.get('block:space'), readJobMetas(env)
+  ]);
+  const meta = JSON.stringify(metaObj);
   // the stored blocks are JSON from outside feeds. Inside a <script> tag, HTML escaping would corrupt them, and raw "<" could close
   // the tag and inject markup. So <, > and & are written as JSON \u escapes: still the same JSON, but it can never leave the tag.
   const safe = s => s.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -171,26 +175,76 @@ async function page(request, env) {
   return new Response(out.body, { status: out.status, headers: h });
 }
 
-/* ---------- refresh jobs ---------- */
+/* ---------- refresh jobs ----------
+   Each job stores its own meta:<job> and report:<job>. The crons overlap, and a shared document
+   was replaced by whichever run finished last: the 30-minute space run emptied /api/health of
+   sats/earth/exo/sb, and could write back another job's stale meta (so earth fetched again). */
+const REFRESH_JOBS = ['sats', 'exo', 'sb', 'earth', 'space'];
+
+async function readJobMetas(env) {
+  const rows = await Promise.all(REFRESH_JOBS.map(k => env.LIVE.get('meta:' + k)));
+  const meta = {}, missing = [];
+  REFRESH_JOBS.forEach((k, i) => { if (rows[i]) meta[k] = JSON.parse(rows[i]); else missing.push(k); });
+  // jobs that have not run since meta was split still live in the old combined document
+  if (missing.length) {
+    const legacy = JSON.parse((await env.LIVE.get('meta')) || '{}');
+    for (const k of missing) if (legacy[k]) meta[k] = legacy[k];
+  }
+  return meta;
+}
+
+async function readStatus(env) {
+  const [meta, rows, legacyRaw] = await Promise.all([
+    readJobMetas(env),
+    Promise.all(REFRESH_JOBS.map(k => env.LIVE.get('report:' + k))),
+    env.LIVE.get('report')
+  ]);
+  const legacy = JSON.parse(legacyRaw || 'null');
+  const report = {}, errors = {};
+  let at = '', own = false;
+  REFRESH_JOBS.forEach((k, i) => {
+    if (rows[i]) {
+      own = true;
+      const row = JSON.parse(rows[i]);
+      if (row.at > at) at = row.at;
+      report[k] = row.ok === false ? { ok: false, error: row.error } : row.skipped ? { ok: true, skipped: row.skipped } : { ok: true, n: row.n, bytes: row.bytes };
+      if (row.ok === false) errors[k + '_error'] = { at: row.at, error: row.error };
+    } else if (legacy && legacy.report && legacy.report[k]) {
+      report[k] = legacy.report[k];
+      if (legacy.errors && legacy.errors[k + '_error']) errors[k + '_error'] = legacy.errors[k + '_error'];
+    }
+  });
+  return { meta, lastRun: own ? { at, report, errors } : legacy };
+}
+
 async function refreshAll(env, only) {
   const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth, space: refreshSpace };
-  const meta = JSON.parse((await env.LIVE.get('meta')) || '{}');
+  // read for earth's "already have this day" check; never written back as one document
+  const meta = await readJobMetas(env);
   const report = {};
   for (const k of Object.keys(jobs)) {
     if (only && !only.includes(k)) continue;
     try {
       const r = await jobs[k](env, meta);
-      if (r.skip) { report[k] = { ok: true, skipped: r.skip }; continue; }
+      const at = new Date().toISOString();
+      if (r.skip) {
+        report[k] = { ok: true, skipped: r.skip };
+        await env.LIVE.put('report:' + k, JSON.stringify({ at, ok: true, skipped: r.skip }));
+        continue;
+      }
       if (r.block) await env.LIVE.put('block:' + r.block, r.text);
-      meta[k] = Object.assign({ n: r.n, at: new Date().toISOString(), src: r.src }, r.date ? { date: r.date } : {});
+      const entry = Object.assign({ n: r.n, at, src: r.src }, r.date ? { date: r.date } : {});
       report[k] = { ok: true, n: r.n, bytes: r.bytes || r.text.length };
+      await Promise.all([
+        env.LIVE.put('meta:' + k, JSON.stringify(entry)),
+        env.LIVE.put('report:' + k, JSON.stringify({ at, ok: true, n: r.n, bytes: report[k].bytes }))
+      ]);
     } catch (e) {
-      report[k] = { ok: false, error: String(e && e.message || e) };
-      meta[k + '_error'] = { at: new Date().toISOString(), error: String(e && e.message || e) };
+      const at = new Date().toISOString(), error = String(e && e.message || e);
+      report[k] = { ok: false, error };
+      await env.LIVE.put('report:' + k, JSON.stringify({ at, ok: false, error }));
     }
   }
-  await env.LIVE.put('meta', JSON.stringify(Object.fromEntries(Object.entries(meta).filter(([k]) => !k.endsWith('_error')))));
-  await env.LIVE.put('report', JSON.stringify({ at: new Date().toISOString(), report, errors: Object.fromEntries(Object.entries(meta).filter(([k]) => k.endsWith('_error'))) }));
   return report;
 }
 
@@ -338,7 +392,7 @@ async function refreshSB(env) {
 /* ---------- status ---------- */
 async function health(env) {
   const out = { kv: !!env.LIVE, now: new Date().toISOString() };
-  if (env.LIVE) { out.meta = JSON.parse((await env.LIVE.get('meta')) || '{}'); out.lastRun = JSON.parse((await env.LIVE.get('report')) || 'null'); }
+  if (env.LIVE) { const s = await readStatus(env); out.meta = s.meta; out.lastRun = s.lastRun; }
   return json(out);
 }
 const json = (o, status = 200, extra) => new Response(JSON.stringify(o, null, 2), { status, headers: Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, extra || {}) });
