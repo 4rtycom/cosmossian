@@ -3896,20 +3896,45 @@ addEventListener('keyup',e=>{CK.keys[e.code]=false;});
 addEventListener('blur',()=>{CK.keys={};});
 /* ================= AUDIO ================= */
 let audio=null,soundOn=false;
+// Space ambience, synthesised (no audio files). The deep drone alone sits below the range of laptop and phone speakers, so it is
+// layered with a slow mid-range pad, a soft "solar wind" of filtered noise and, now and then, a faint chime with a long echo.
 function startAudio(){
-  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;const ctx=new AC();
-  const master=ctx.createGain();master.gain.value=0;master.connect(ctx.destination);
-  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=420;lp.Q.value=.7;lp.connect(master);
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
+  try{if(navigator.audioSession)navigator.audioSession.type='playback';}catch(e){} // iPhone: play even with the ringer switch on silent (Safari 17+)
+  const ctx=new AC();
+  const comp=ctx.createDynamicsCompressor();comp.threshold.value=-18;comp.ratio.value=3;comp.attack.value=0.05;comp.release.value=0.4;comp.connect(ctx.destination);
+  const master=ctx.createGain();master.gain.value=0;master.connect(comp);
+  const lfo=(f,amt,param,type)=>{const o=ctx.createOscillator();o.type=type||'sine';o.frequency.value=f;const g=ctx.createGain();g.gain.value=amt;o.connect(g);g.connect(param);o.start();return o;};
+  // 1. the deep drone (as before); the cockpit opens this filter up with speed
+  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=420;lp.Q.value=.7;const dg=ctx.createGain();dg.gain.value=0.4;lp.connect(dg);dg.connect(master);
   [[55,'sine',.5],[55.35,'sine',.5],[82.4,'triangle',.16],[110.3,'triangle',.07],[164.8,'sine',.03]].forEach(([f,t,g])=>{const o=ctx.createOscillator();o.type=t;o.frequency.value=f;const gn=ctx.createGain();gn.gain.value=g;o.connect(gn);gn.connect(lp);o.start();});
   const buf=ctx.createBuffer(1,ctx.sampleRate*4,ctx.sampleRate),d=buf.getChannelData(0);let last=0;for(let i=0;i<d.length;i++){last=(last+0.02*(Math.random()*2-1))/1.02;d[i]=last*3.5;}
   const src=ctx.createBufferSource();src.buffer=buf;src.loop=true;const ng=ctx.createGain();ng.gain.value=.35;src.connect(ng);ng.connect(lp);src.start();
-  const lfo=ctx.createOscillator();lfo.frequency.value=.05;const lg=ctx.createGain();lg.gain.value=180;lfo.connect(lg);lg.connect(lp.frequency);lfo.start();
+  lfo(.05,180,lp.frequency);
+  // 2. pad: an open A chord, each note a detuned pair, swelling slowly in and out on its own cycle
+  const padF=ctx.createBiquadFilter();padF.type='lowpass';padF.frequency.value=900;padF.Q.value=0.5;lfo(.031,350,padF.frequency);
+  const pad=ctx.createGain();pad.gain.value=1.6;padF.connect(pad);pad.connect(master);
+  [110,164.81,220,246.94,329.63,440].forEach((f,i)=>{const v=ctx.createGain();v.gain.value=0.06/(1+i*0.25);v.connect(padF);
+    [-4,4].forEach(c=>{const o=ctx.createOscillator();o.type=i<2?'triangle':'sawtooth';o.frequency.value=f;o.detune.value=c+(i*1.7);o.connect(v);o.start();});
+    lfo(0.017+i*0.0061,0.045/(1+i*0.25),v.gain);});
+  // 3. solar wind: noise through a slowly wandering band-pass
+  const nb=ctx.createBuffer(1,ctx.sampleRate*6,ctx.sampleRate),nd=nb.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
+  const ns=ctx.createBufferSource();ns.buffer=nb;ns.loop=true;const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=700;bp.Q.value=0.9;lfo(.023,420,bp.frequency);
+  const wind=ctx.createGain();wind.gain.value=0.1;lfo(.013,0.06,wind.gain);ns.connect(bp);bp.connect(wind);wind.connect(master);ns.start();
+  // 4. chimes: soft high notes (A minor pentatonic) into a long, darkening echo
+  const echo=ctx.createDelay(2);echo.delayTime.value=0.62;const fb=ctx.createGain();fb.gain.value=0.55;const ef=ctx.createBiquadFilter();ef.type='lowpass';ef.frequency.value=2600;
+  const wet=ctx.createGain();wet.gain.value=0.6;echo.connect(ef);ef.connect(fb);fb.connect(echo);ef.connect(wet);wet.connect(master);
+  const NOTES=[880,987.77,1318.51,1567.98,1760,2093];
+  const chime=t=>{const f=NOTES[(Math.random()*NOTES.length)|0];[1,2.01].forEach((m,k)=>{const o=ctx.createOscillator();o.type='sine';o.frequency.value=f*m;const g=ctx.createGain();
+      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(k?0.012:0.05,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+3.5);o.connect(g);g.connect(echo);g.connect(master);o.start(t);o.stop(t+3.6);});};
+  let next=ctx.currentTime+1.5;chime(next);
+  const sched=()=>{if(ctx.state==='closed')return;while(next<ctx.currentTime+6){next+=4+Math.random()*7;chime(next);}setTimeout(sched,2000);};sched();
   return{ctx,master,lp};
 }
 $('#bSound').addEventListener('click',e=>{
   if(!audio){audio=startAudio();if(!audio){toast('This browser does not support Web Audio');return;}}
   soundOn=!soundOn;const t=audio.ctx.currentTime;if(audio.ctx.state==='suspended')audio.ctx.resume();
-  audio.master.gain.cancelScheduledValues(t);audio.master.gain.setValueAtTime(audio.master.gain.value,t);audio.master.gain.linearRampToValueAtTime(soundOn?.12:0,t+(soundOn?2.5:.6));
+  audio.master.gain.cancelScheduledValues(t);audio.master.gain.setValueAtTime(audio.master.gain.value,t);audio.master.gain.linearRampToValueAtTime(soundOn?.32:0,t+(soundOn?2.5:.6));
   e.currentTarget.classList.toggle('on',soundOn);});
 
 /* ================= FRAME LOOP ================= */
