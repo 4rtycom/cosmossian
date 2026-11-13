@@ -117,6 +117,10 @@ A daily `craft` job asks JPL Horizons for the heliocentric ecliptic position of 
 
 A one-time `gaia` job (on the 3-hourly run; it skips once the file exists) queries the ESA Gaia archive for every Gaia DR3 star from G = 7.0 to 9.0, fainter than the HYG stars the sky already has, in 0.1-mag slices. It packs them brightest first at 8 bytes a star (position, G, BP−RP colour, parallax) into KV (`bin:gaia`, ~1.2 MB), and `GET /api/gaia.bin` serves the file. A few seconds after the sky is first shown, the page loads it when idle, converts G and BP−RP to the V magnitude and B−V colour the sky shader uses, and places the stars at their parallax distances, so the sky shifts correctly when you visit another star system. Phones load only the stars to G = 8.3. To rebuild, delete `bin:gaia` in KV. Data: ESA/Gaia/DPAC (CC BY-SA 3.0 IGO).
 
+## TV mode
+
+"Watch on TV" on the title screen opens a small panel. **Cast to TV** appears where the browser can present to a Chromecast or Google TV (Presentation API: Chrome renders `/?tv=1` itself and streams it to the TV). **Start TV mode on this screen** goes full screen here, for screen mirroring or AirPlay. A smart-TV browser can open `cosmossian.com/?tv=1` directly. TV mode passes the human check, then runs a hands-free tour with no interface or labels: Solar System, Earth, ISS, Moon, Jupiter, Saturn, Sun, Orion Nebula, M87*, Milky Way. About 25 s per stop, the camera slowly circling, with a caption. Remote: right/left skip, OK or Space pauses, Back or Esc leaves. Stops are in `TV_STOPS` in `public/index.html`.
+
 ## Routes
 
 | Path | Behavior |
