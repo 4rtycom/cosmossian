@@ -97,6 +97,10 @@ Planet photos load on demand: a body's textures are fetched once it is a few pix
 
 Selecting the ISS (its label, or "ISS" in search) flies the camera to the station and loads NASA's 3D model on demand: `public/models/iss-hd/` (NASA 3D Resources "ISS (D) (IGOAL)", ~2.7 million triangles, ~33 MB, Draco-compressed geometry and WebP textures, split into files under Cloudflare's 25 MB asset limit) on desktops, `public/models/iss-lite.glb` (~175,000 triangles, 0.5 MB) on phones and tablets. The loaders and Draco decoder are self-hosted in `public/lib/`. The model replaces the simple stand-in only when it is large on screen. Credits and licences: `public/lib/README.txt`.
 
+## Live ISS position
+
+The scheduled satellite refresh also stores the ISS's own orbital elements (CelesTrak, NORAD 25544) in KV (`block:iss`), written into `<script id="iss">` on the page; the page ships with a snapshot as a fallback. The page propagates them with SGP4's secular J2 terms (checked against wheretheiss.at: within ~2–11 km over 24 h of the element epoch). Earth's rotation follows Greenwich sidereal time whenever the clock runs slowly enough to follow it, and Earth's axis now leans the right way, so with the clock on today at normal speed the station is over the right spot, day and night fall where they do now, and the seasons are right. The ISS card shows where it is right now.
+
 ## Routes
 
 | Path | Behavior |
