@@ -667,6 +667,8 @@ body.cockpit .rail{display:none}
     <h3>Move around</h3>
     <dl class="keys">
       <dt>Drag</dt><dd>Rotate the view (on a phone: one finger)</dd>
+      <dt>Right-drag · Shift+drag</dt><dd>Move freely through a star system or between the stars (on a phone: two fingers). Selecting a planet or star locks onto it again.</dd>
+      <dt>W A S D · R F</dt><dd>Move forward, back and sideways · up and down (Shift: faster)</dd>
       <dt>Scroll · + −</dt><dd>Zoom in and out (on a phone: pinch). Keep zooming past the edge to move to the next level.</dd>
       <dt>Click</dt><dd>Select an object or its name. Click a selected star or galaxy again to fly inside.</dd>
       <dt>Search · /</dt><dd>Type any planet, moon, star, exoplanet, galaxy or black hole and press Enter.</dd>
@@ -1796,30 +1798,34 @@ vec3 nstars(vec3 d){vec3 c=vec3(0.);
 void samp(vec3 p,out float em,out float dust,out float ion,out float syn){
  float r=length(p);vec3 q=p+uSeed;em=0.;dust=0.;ion=0.;syn=0.;
  if(uType<0.5){
-  float w1=cl_fbm(q*1.25,2.),w2=cl_fbm(q*1.25+7.3,2.);vec3 w=vec3(w1,w2,w1*w2*2.)-0.5;
-  float n=cl_fbm(q*2.1+w*2.6,4.);
+  // the gas billows: the warp field drifts slowly, so clouds roll and fold over tens of seconds
+  float w1=cl_fbm(q*1.25+vec3(0.,uTime*0.028,0.),2.),w2=cl_fbm(q*1.25+7.3+vec3(uTime*0.021,0.,-uTime*0.017),2.);vec3 w=vec3(w1,w2,w1*w2*2.)-0.5;
+  float n=cl_fbm(q*2.1+w*2.6+vec3(uTime*0.009,0.,0.),4.);
   float fall=smoothstep(1.18,0.22,r+(n-0.5)*0.55);
   float cav=smoothstep(uCav*0.45,uCav*1.35,length(p-vec3(0.04,0.02,0.))+(n-0.5)*0.3);
   em=max(n-0.41,0.)*2.4*fall*mix(1.,cav,0.92);
   em+=smoothstep(0.03,0.,abs(n-0.455))*fall*cav*1.5*exp(-r*1.3);
-  float d2=cl_fbm(q*3.3+w*3.1+17.,3.5);
+  em*=0.88+0.12*sin(uTime*0.45+n*18.); // ionisation fronts shimmer as starlight flickers through the gas
+  float d2=cl_fbm(q*3.3+w*3.1+17.+vec3(0.,0.,uTime*0.012),3.5);
   dust=smoothstep(0.53,0.74,d2)*uDust*smoothstep(1.35,0.45,r);
   if(uPil>0.){vec2 c2=p.xz-vec2(0.12,-0.05);float col=smoothstep(0.26,0.05,length(c2*vec2(1.,1.3))+(cl_n(q*6.)-0.5)*0.12+max(p.y+0.1,0.)*0.5)*smoothstep(0.42,0.1,p.y)*smoothstep(-1.1,-0.5,p.y);
     float fin=smoothstep(0.5,0.75,cl_n(vec3(p.x*9.,p.y*2.,p.z*9.)+uSeed));dust+=col*(0.5+fin)*9.*uPil;em+=col*0.6*smoothstep(0.25,0.45,p.y+0.15);}
   ion=exp(-r*r*5.);
  }else if(uType<1.5){
   vec3 pp=p;pp.y*=mix(1.,0.6,uBip);float rr=length(pp);float n=cl_fbm(q*5.2,4.);float ax=abs(normalize(p+1e-5).y);
-  float rad=cl_fbm(normalize(p+1e-5)*9.+uSeed,4.);float rs=0.5+(rad-0.5)*0.08;
+  // a planetary nebula is an expanding shell: it breathes slowly and its spokes stream outward
+  float rad=cl_fbm(normalize(p+1e-5)*9.+uSeed+vec3(0.,0.,uTime*0.05),4.);float rs=0.5+(rad-0.5)*0.08+0.014*sin(uTime*0.33);
   float sh=exp(-pow((rr-rs)/0.06,2.))*(0.35+1.1*n)*(0.6+0.8*rad)+exp(-pow((rr-0.9)/0.16,2.))*0.10*(0.4+n);
   sh*=mix(1.,0.3+1.35*ax,uBip);
-  float knots=smoothstep(0.62,0.8,cl_n(q*26.))*exp(-pow((rr-0.44)/0.06,2.))*uFil*0.5;
+  float knots=smoothstep(0.62,0.8,cl_n(q*26.+vec3(uTime*0.04)))*exp(-pow((rr-0.44-0.01*sin(uTime*0.4))/0.06,2.))*uFil*0.5;
   em=sh*0.75+knots*0.6+smoothstep(0.48,0.,rr)*0.035;ion=smoothstep(0.62,0.32,rr);
  }else if(uType<2.5){
-  float n=cl_fbm(q*3.6+cl_fbm(q*1.8,2.)*2.2,4.);float fil=pow(clamp(1.-abs(n*2.-1.),0.,1.),uFil);
-  float shell=exp(-pow((r-0.78)/(0.07+0.3*uCav),2.));float fill=uCav*smoothstep(0.86,0.1,r);
+  // supernova remnant: the shock filaments writhe as the blast wave runs into the surrounding gas
+  float n=cl_fbm(q*3.6+cl_fbm(q*1.8+vec3(uTime*0.03,0.,uTime*0.02),2.)*2.2,4.);float fil=pow(clamp(1.-abs(n*2.-1.),0.,1.),uFil);
+  float shell=exp(-pow((r-0.78-0.012*sin(uTime*0.27))/(0.07+0.3*uCav),2.));float fill=uCav*smoothstep(0.86,0.1,r);
   em=fil*(shell*1.5+fill*0.9);ion=cl_fbm(q*1.6+3.,3.);syn=uCav*smoothstep(0.75,0.,r)*0.09*(0.6+0.8*cl_n(q*3.));
  }else{
-  float w1=cl_fbm(q*1.1,3.)-0.5;float n=cl_fbm(q*vec3(2.,4.6,2.)+w1*3.,5.);
+  float w1=cl_fbm(q*1.1+vec3(uTime*0.024,0.,0.),3.)-0.5;float n=cl_fbm(q*vec3(2.,4.6,2.)+w1*3.+vec3(0.,uTime*0.01,0.),5.);
   em=max(n-0.36,0.)*1.7*smoothstep(1.15,0.2,r);dust=smoothstep(0.6,0.8,cl_fbm(q*3.+9.,4.))*uDust*0.6;ion=0.;
  }}
 void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*vec3(uv.x*uTanHalf,uv.y*uTanHalf,-1.));vec3 ro=uCamPos;
@@ -1868,8 +1874,9 @@ function renderNeb(dt,out){const u=nebMat.uniforms,maxS=quality==='ultra'?0.8:0.
   const moved=dm>1e-6;NEBR.last.copy(camera.matrixWorld);if(dm>0.02)NEBR.n=Math.min(NEBR.n,2);else if(moved)NEBR.n=Math.min(NEBR.n,6);
   const src=NEBR.rt[NEBR.i],dst=NEBR.rt[1-NEBR.i];NEBR.i=1-NEBR.i;
   u.uRes.value.set(dst.width,dst.height);u.uCamPos.value.copy(camera.position);u.uCamRot.value.setFromMatrix4(camera.matrixWorld);u.uTanHalf.value=Math.tan(camera.fov*DEG/2);
-  nebClock+=dt;u.uTime.value=nebClock;u.uFrame.value=(u.uFrame.value+1)%997;u.uSteps.value=moved?(quality==='ultra'?56:40):(quality==='ultra'?72:52);
-  u.uPrev.value=src.texture;u.uBlend.value=NEBR.n===0?1:Math.max(1/(NEBR.n+1),0.06);NEBR.n=Math.min(NEBR.n+1,60);if(!src.texture||!NEBR.started){u.uBlend.value=1;NEBR.started=true;}
+  nebClock+=dt*3.5;u.uTime.value=nebClock; // about 3.5x faster than before, so the gas visibly rolls and the filaments writhe
+u.uFrame.value=(u.uFrame.value+1)%997;u.uSteps.value=moved?(quality==='ultra'?56:40):(quality==='ultra'?72:52);
+  u.uPrev.value=src.texture;u.uBlend.value=NEBR.n===0?1:Math.max(1/(NEBR.n+1),0.2);NEBR.n=Math.min(NEBR.n+1,60);if(!src.texture||!NEBR.started){u.uBlend.value=1;NEBR.started=true;}
   renderer.setRenderTarget(dst);renderer.render(nebScene,bhCam);renderer.setRenderTarget(out);nebBlitMat.uniforms.uTex.value=dst.texture;nebBlitMat.uniforms.uTx.value.set(0.75/dst.width,0.75/dst.height);renderer.render(nebBlit,bhCam);}
 const HA=[1,.30,.38],O3=[.32,.86,.80],S2=[1,.42,.22];
 // look of each well-known nebula (colours: hydrogen red, oxygen teal); the rest take their look from their class
@@ -2525,6 +2532,7 @@ function poseFor(alt,th,ph,outPos,outQ){
 }
 const _p=new V3(),_q=new THREE.Quaternion(),_d0=new V3(),_d1=new V3();
 function updateCamera(dt){
+  freeKeys(dt);
   const k=1-Math.exp(-dt*4.5);
   C.alt=Math.exp(lerp(Math.log(C.alt),Math.log(C.gAlt),k));
   C.th+=(C.gTh-C.th)*k;C.ph+=(C.gPh-C.ph)*k;C.fixed.lerp(C.gFixed,k);
@@ -2540,6 +2548,33 @@ function updateCamera(dt){
   }else{camera.position.copy(_p);camera.quaternion.copy(_q);}
 }
 function startFlight(dur){C.flight={p0:camera.position.clone(),q0:camera.quaternion.clone(),t:0,dur};}
+// Free view: the camera circles a point in space instead of a body (used in star systems until something is selected)
+function freeAt(p,alt,dur){startFlight(dur||2.4);C.focus=null;C.ground=false;C.fixed.copy(p);C.gFixed.copy(p);
+  const rel=camera.position.clone().sub(p),r=rel.length()||1;C.th=C.gTh=Math.atan2(rel.x,rel.z);C.ph=C.gPh=clamp(Math.acos(clamp(rel.y/r,-1,1)),.12,Math.PI-.12);C.alt=C.gAlt=alt;}
+const freeTier=()=>!CK.on&&!fading&&(tier==='solar'||tier==='exo'||tier==='surface'||tier==='neighborhood');
+// stop following a body, keeping the camera exactly where it is
+function releaseFocus(){if(!C.focus)return;scene.updateMatrixWorld();centerOf(_c);C.fixed.copy(_c);C.gFixed.copy(_c);
+  const rel=camera.position.clone().sub(_c),r=rel.length()||1;C.th=C.gTh=Math.atan2(rel.x,rel.z);C.ph=C.gPh=clamp(Math.acos(clamp(rel.y/r,-1,1)),.03,Math.PI-.03);C.alt=C.gAlt=r;
+  C.focus=null;C.ground=false;C.flight=null;
+  if(tier==='surface'){tier=active==='sol'?'solar':'exo';applyTierUI();}
+  freeLimits();}
+function freeLimits(){if(tier==='neighborhood')return;C.minAlt=0.25;C.maxAlt=active==='sol'?300:Math.max(exoAlt*2.5,80);}
+// how far the free point may wander: within the star system, or within the mapped neighbourhood
+function freeClamp(){if(C.focus)return;const lim=tier==='neighborhood'?380:C.maxAlt*1.2;if(C.gFixed.length()>lim)C.gFixed.setLength(lim);}
+// slide the point the camera circles, in screen directions (dx, dy in pixels)
+const _pr=new V3(),_pu=new V3(),_pf=new V3();
+function panBy(dx,dy){if(!freeTier())return;releaseFocus();const sc=C.alt*2*Math.tan(camera.fov*DEG/2)/innerHeight;
+  _pr.set(1,0,0).applyQuaternion(camera.quaternion);_pu.set(0,1,0).applyQuaternion(camera.quaternion);
+  C.gFixed.addScaledVector(_pr,-dx*sc).addScaledVector(_pu,dy*sc);freeClamp();C.fixed.copy(C.gFixed);}
+// W S forward and back, A D sideways, R F up and down (the cockpit's keys); Shift moves faster
+const FREEK={};
+addEventListener('keydown',e=>{if(/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)||e.ctrlKey||e.metaKey||e.altKey)return;if(['KeyW','KeyA','KeyS','KeyD','KeyR','KeyF','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)){FREEK[e.code]=true;FREEK.shift=e.shiftKey;}});
+addEventListener('keyup',e=>{delete FREEK[e.code];FREEK.shift=e.shiftKey;});addEventListener('blur',()=>{for(const k in FREEK)delete FREEK[k];});
+function freeKeys(dt){if(!freeTier())return;const k=FREEK;
+  const f=(k.KeyW||k.ArrowUp?1:0)-(k.KeyS||k.ArrowDown?1:0),x=(k.KeyD||k.ArrowRight?1:0)-(k.KeyA||k.ArrowLeft?1:0),y=(k.KeyR?1:0)-(k.KeyF?1:0);if(!f&&!x&&!y)return;
+  releaseFocus();const sp=C.alt*(k.shift?2.4:0.8)*dt;
+  _pf.set(0,0,-1).applyQuaternion(camera.quaternion);_pr.set(1,0,0).applyQuaternion(camera.quaternion);_pu.set(0,1,0).applyQuaternion(camera.quaternion);
+  C.gFixed.addScaledVector(_pf,f*sp).addScaledVector(_pr,x*sp).addScaledVector(_pu,y*sp);freeClamp();}
 function focusBody(body,{ground,alt,dur=2.4}){
   startFlight(dur);C.focus=body;C.ground=ground;
   scene.updateMatrixWorld(true);centerOf(_c);frameQ(_fq);
@@ -2639,15 +2674,15 @@ function buildSystem(name){
   refreshFocusList();
 }
 function enterExo(name){
-  buildSystem(name);buildSky(name);active=name;tier='exo';C.flight=null;C.focus=exoStar;C.ground=false;
-  C.minAlt=exoStar.R*0.3;C.maxAlt=Math.max(exoAlt*2.5,80);C.alt=exoAlt*6;C.gAlt=exoAlt;C.th=C.gTh=0.6;C.ph=C.gPh=1.1;
+  buildSystem(name);buildSky(name);active=name;tier='exo';C.flight=null;C.focus=null;C.ground=false;
+  scene.updateMatrixWorld();exoStar.pivot.getWorldPosition(C.fixed);C.gFixed.copy(C.fixed);C.minAlt=0.25;C.maxAlt=Math.max(exoAlt*2.5,80);C.alt=exoAlt*6;C.gAlt=exoAlt;C.th=C.gTh=0.6;C.ph=C.gPh=1.1;
   select({type:'body',key:exoStar.key});
 }
 function enterSystemOf(name){if(name==='Sun')enterSolar();else enterExo(name);}
 function systemOverview(){
   if(active==='sol'){solarOverview();return;}
   if(CK.on){tier='exo';CK.goto='*';applyTierUI();return;}
-  tier='exo';focusBody(exoStar,{ground:false,alt:exoAlt,dur:2.4});C.gPh=1.1;applyTierUI();select({type:'body',key:exoStar.key});
+  tier='exo';scene.updateMatrixWorld();freeAt(exoStar.pivot.getWorldPosition(new V3()),exoAlt,2.4);C.gPh=1.1;freeLimits();applyTierUI();select({type:'body',key:exoStar.key});
 }
 let fading=false;
 function fadeTo(fn){if(fading)return;fading=true;if(CK.on){warpFX();CK.vel.set(0,0,0);CK.auto=false;$('#ckAuto').classList.remove('on');CK.handoff=2.2;}$('#fade').classList.add('on');setTimeout(()=>{CK.goto=null;fn();applyTierUI();requestAnimationFrame(()=>{$('#fade').classList.remove('on');fading=false;});},430);}
@@ -2679,7 +2714,7 @@ function enterHood(from){
   select(CAT[star]&&!STAR_OBJ[star]?{type:'cat',key:star}:{type:'star',key:star});
 }
 function enterSolar(){
-  buildSky('Sun');active='sol';tier='solar';C.flight=null;C.focus=SUN;C.ground=false;C.minAlt=1.2;C.maxAlt=300;C.alt=900;C.gAlt=120;C.th=C.gTh=0.6;C.ph=C.gPh=1.05;
+  buildSky('Sun');active='sol';tier='solar';C.flight=null;C.focus=null;C.ground=false;scene.updateMatrixWorld();SUN.pivot.getWorldPosition(C.fixed);C.gFixed.copy(C.fixed);C.minAlt=0.25;C.maxAlt=300;C.alt=900;C.gAlt=120;C.th=C.gTh=0.6;C.ph=C.gPh=1.05;
   select({type:'body',key:'sun'});
 }
 function goTier(t){
@@ -2698,7 +2733,7 @@ function goTier(t){
     else fadeTo(()=>{if(b.sys==='sol')enterSolar();else enterExo(b.sys);C.alt=C.gAlt;C.flight=null;scene.updateMatrixWorld(true);updateCamera(0.016);flyToBody(b);});
   }
 }
-function solarOverview(){if(CK.on&&active==='sol'){tier='solar';CK.goto='*';applyTierUI();return;}active='sol';tier='solar';focusBody(SUN,{ground:false,alt:120,dur:2.4});C.gPh=1.05;applyTierUI();
+function solarOverview(){if(CK.on&&active==='sol'){tier='solar';CK.goto='*';applyTierUI();return;}active='sol';tier='solar';scene.updateMatrixWorld();freeAt(SUN.pivot.getWorldPosition(new V3()),120,2.4);C.gPh=1.05;freeLimits();applyTierUI();
   if(!selected||selected.type==='body')select({type:'body',key:'sun'});}
 function flyToBody(b){
   select({type:'body',key:b.key});
@@ -2919,29 +2954,36 @@ function edgePush(dir,amt){
   if(dir==='out'){if(tier==='bh')exitBH();else if(tier==='neb')exitNeb();else if(tier==='surface')systemOverview();else if(tier==='solar'||tier==='exo')fadeTo(()=>enterHood('system'));else if(tier==='neighborhood')fadeTo(()=>enterGalaxy(true));else fadeTo(()=>enterUniverse(true));}
   else{if(tier==='universe'){const k=selected.key;fadeTo(()=>enterGalaxyX(k));}else if(tier==='galaxy')fadeTo(()=>enterHood('galaxy'));else fadeTo(()=>enterSystemOf(ht));}
 }
-function zoomBy(f,amt){
-  // zooming in always heads for whatever is selected
-  if(f<1&&!CK.on&&(tier==='solar'||tier==='exo')&&selected&&selected.type==='body'){const b=bodies[selected.key];if(b&&b.kind!=='star'&&b!==C.focus&&b.sys===active&&!C.flight){flyToBody(b);return;}}
+// pt: screen point to zoom toward (mouse pointer, or the middle of a pinch). With nothing focused, in star systems and in
+// interstellar space, zooming heads for that point, so you can fly anywhere; a planet or star is only focused when you choose it.
+const _zr=new V3(),_zn=new THREE.Vector2();
+function zoomBy(f,amt,pt){
+  // zoom buttons and keys still head for a selected planet
+  if(f<1&&!CK.on&&(tier==='solar'||tier==='exo')&&selected&&selected.type==='body'&&!pt){const b=bodies[selected.key];if(b&&b.kind!=='star'&&b!==C.focus&&b.sys===active&&!C.flight){flyToBody(b);return;}}
   let g=C.gAlt*f;
   if(g>C.maxAlt){g=C.maxAlt;if(f>1)edgePush('out',amt);}
   else if(g<C.minAlt){g=C.minAlt;if(f<1)edgePush('in',amt);}
+  if(pt&&!C.focus&&!C.flight&&freeTier()&&C.gAlt>0){const k=1-g/C.gAlt; // the point under the pointer stays put while the view closes in on it
+    _zn.set(pt.x/innerWidth*2-1,-(pt.y/innerHeight)*2+1);_zr.set(_zn.x,_zn.y,0.5).unproject(camera).sub(camera.position).normalize();
+    _zr.multiplyScalar(C.alt).add(camera.position).sub(C.gFixed);C.gFixed.addScaledVector(_zr,k);freeClamp();}
   C.gAlt=g;
 }
-canvas.addEventListener('wheel',e=>{e.preventDefault();if(fading)return;const dy=e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1);if(CK.on&&navHit(e)){navZoom(Math.exp(clamp(dy,-300,300)*0.0022));mfdT=1;return;}if(CK.on){CK.throttle=clamp(CK.throttle-dy*0.0012,-1,1);const tv=Math.round(CK.throttle*100);$('#ckThrottle').value=tv;$('#ckThrTxt').textContent=tv+'%';return;}zoomBy(Math.exp(clamp(dy,-200,200)*0.0016),Math.abs(dy));},{passive:false});
+canvas.addEventListener('wheel',e=>{e.preventDefault();if(fading)return;const dy=e.deltaY*(e.deltaMode===1?33:e.deltaMode===2?400:1);if(CK.on&&navHit(e)){navZoom(Math.exp(clamp(dy,-300,300)*0.0022));mfdT=1;return;}if(CK.on){CK.throttle=clamp(CK.throttle-dy*0.0012,-1,1);const tv=Math.round(CK.throttle*100);$('#ckThrottle').value=tv;$('#ckThrTxt').textContent=tv+'%';return;}zoomBy(Math.exp(clamp(dy,-200,200)*0.0016),Math.abs(dy),{x:e.clientX,y:e.clientY});},{passive:false});
 const ptrs=new Map();let downAt=null,pinch0=0;
-canvas.addEventListener('pointerdown',e=>{{const p=navHit(e);if(p){e.preventDefault();navClick(p);return;}}canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+canvas.addEventListener('pointerdown',e=>{{const p=navHit(e);if(p){e.preventDefault();navClick(p);return;}}canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey});
   if(ptrs.size===1)downAt={x:e.clientX,y:e.clientY,t:performance.now(),moved:false};
   if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);if(downAt)downAt.moved=true;}
   canvas.classList.add('dragging');});
 canvas.addEventListener('pointermove',e=>{if(!ptrs.has(e.pointerId))return;const p=ptrs.get(e.pointerId);const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
-  if(ptrs.size===2){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0>0&&d>0){zoomBy(pinch0/d,Math.abs(pinch0-d)*3);}pinch0=d;return;}
+  if(ptrs.size===2){const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0>0&&d>0){zoomBy(pinch0/d,Math.abs(pinch0-d)*3,{x:(a.x+b.x)/2,y:(a.y+b.y)/2});}pinch0=d;if(!CK.on)panBy(dx/2,dy/2);return;}
   if(downAt&&Math.hypot(e.clientX-downAt.x,e.clientY-downAt.y)>5)downAt.moved=true;
   if(CK.on){if(CK.handoff<=0){if(!CK.auto){CK.ship.rotateY(-dx*0.0024);CK.ship.rotateX(-dy*0.0024);}}return;}
+  if(p.pan&&freeTier()){panBy(dx,dy);return;}
   const R=C.focus?C.focus.R:0;const f=R>0?clamp(C.alt/(R+C.alt)*1.1,0.00005,1):1;
   C.gTh-=dx*0.005*f;C.gPh=clamp(C.gPh-dy*0.005*f,0.03,Math.PI-0.03);});
 function endPtr(e){if(!ptrs.has(e.pointerId))return;ptrs.delete(e.pointerId);if(ptrs.size<2)pinch0=0;
   if(ptrs.size===0){canvas.classList.remove('dragging');if(downAt&&!downAt.moved&&performance.now()-downAt.t<600){const L=fading?null:labelAt(e.clientX,e.clientY);if(L)handlePick(L.pick);else pick(e.clientX,e.clientY);}downAt=null;}}
-canvas.addEventListener('pointermove',e=>{if(CK.on&&!ptrs.size)canvas.style.cursor=navHit(e)?'pointer':'';});canvas.addEventListener('pointerup',endPtr);canvas.addEventListener('contextmenu',e=>{if(CK.on)e.preventDefault();});canvas.addEventListener('dblclick',()=>{if(CK.on){CK.hy=0;CK.hp=0;}});canvas.addEventListener('pointercancel',endPtr);
+canvas.addEventListener('pointermove',e=>{if(CK.on&&!ptrs.size)canvas.style.cursor=navHit(e)?'pointer':'';});canvas.addEventListener('pointerup',endPtr);canvas.addEventListener('contextmenu',e=>e.preventDefault());canvas.addEventListener('dblclick',()=>{if(CK.on){CK.hy=0;CK.hp=0;}});canvas.addEventListener('pointercancel',endPtr);
 const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();ray.layers.enable(1);
 function pick(x,y){
   if(fading)return;
@@ -3019,10 +3061,10 @@ addEventListener('keydown',e=>{if(e.key==='Escape')$('#help').hidden=true;if(e.t
   if(e.key==='/'){e.preventDefault();$('#search').focus();}if(e.key==='?'){$('#help').hidden=!$('#help').hidden;}});
 // one line that always says what you can do next
 function updateHint(){const el=$('#hint');if(!el)return;let t='';const s=selected;
-  if(tier==='solar'||tier==='exo')t='<b>Click</b> a planet or its name to fly there · <b>drag</b> to rotate · <b>scroll</b> to zoom, and keep scrolling out to reach the stars';
+  if(tier==='solar'||tier==='exo')t='<b>Scroll</b> toward any point to fly there · <b>right-drag</b> or <b>W A S D</b> to move · <b>drag</b> to rotate · <b>click</b> a planet to visit it';
   else if(tier==='surface'&&typeof ISS!=='undefined'&&C.focus===ISS.F)t='<b>Drag</b> to circle the station · <b>scroll</b> to come closer or pull away · <b>Esc</b> returns to the whole system';
   else if(tier==='surface')t='<b>Scroll in</b> to descend to the ground · <b>drag</b> to move across the surface · <b>Esc</b> returns to the whole system';
-  else if(tier==='neighborhood')t=s&&(s.type==='star'||s.type==='cat')&&s.key!=='Sun'?'<b>Click '+s.key+' again</b>, or use the Enter button in the panel, to fly into its system':'<b>Click</b> a star to select it · <b>click it again</b> to enter its system · scroll out for the whole galaxy';
+  else if(tier==='neighborhood')t=s&&(s.type==='star'||s.type==='cat')&&s.key!=='Sun'?'<b>Click '+s.key+' again</b>, or use the Enter button in the panel, to fly into its system':'<b>Scroll</b> toward any point to fly through interstellar space · <b>click</b> a star to select it, <b>again</b> to enter its system';
   else if(tier==='galaxy')t=galFocus==='mw'?'<b>Click</b> any marker to learn about it · select “You are here” and <b>scroll in</b> for the Sun’s neighbourhood':'<b>Click</b> a marker to learn about it · <b>scroll out</b> to return to the Universe';
   else if(tier==='universe')t='<b>Click</b> a galaxy to select it · <b>click it again</b> to fly inside · drag to look around';
   else if(tier==='neb')t=CK.on?'':'<b>Drag</b> to circle the nebula · <b>scroll</b> to fly into it · scroll out or press <b>Esc</b> to leave';
@@ -4060,7 +4102,8 @@ function frame(now){
 }
 // boot
 buildSky('Sun');
-C.focus=SUN;C.minAlt=1.2;applyTierUI();select({type:'body',key:'sun'});
+// start free in the Solar System: the camera circles a point at the Sun, not the Sun itself, so you can roam from the first moment
+C.focus=null;scene.updateMatrixWorld();SUN.pivot.getWorldPosition(C.fixed);C.gFixed.copy(C.fixed);freeLimits();applyTierUI();select({type:'body',key:'sun'});
 camera.position.set(0,400,700);camera.lookAt(0,0,0);
 requestAnimationFrame(t=>{last=t;frame(t);});
 
