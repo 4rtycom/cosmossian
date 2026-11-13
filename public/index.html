@@ -933,7 +933,9 @@ vec2 eqUV(vec3 p){float a=atan(p.z,-p.x)/6.2831853;float b=fract(a);float u=fwid
 const PLANET_FRAG=FRAG_HEAD+EQUV+`
 uniform sampler2D uMapA,uMapB,uMapC;uniform float uReal;uniform vec3 uTint;uniform vec2 uGap; // real imagery: 1 Earth (day, night, elevation/water/clouds), 2 Moon (colour, elevation), 3 rocky world (colour), 4 cloud tops, 5 cloud tops + radar surface below
 // uGap: maps with unimaged regions. x>0: black means no data, y>0: white means no data; the generated surface shows through there
-uniform int uType;
+#ifndef PTYPE
+#define PTYPE 0
+#endif
 uniform vec3 uSunObj,uCamObj,uColA,uColB,uColC,uColD,uRim,uStormCol;
 uniform vec4 uP1,uStorm,uP2;
 float gRay=0.,gYoung=0.;
@@ -970,7 +972,8 @@ void main(){
  vec3 V=normalize(uCamObj-vObj);
  vec3 L=normalize(uSunObj);
  vec3 col=vec3(0.);float hb=0.;float spec=0.;vec3 emit=vec3(0.);float cshadow=0.;
- if(uType==3){
+ #if PTYPE==3
+ {
   float t=uTime*0.03;
   float g1=cl_fbm(p*5.+vec3(t,0.,-t),6.);
   float gran=cl_fbm(p*70.+g1*4.+vec3(0.,t*4.,0.),clamp(OC(70.),0.,8.));
@@ -990,9 +993,11 @@ void main(){
   float flare=pow(cl_n(p*9.+vec3(0.,uTime*0.5,uTime*0.2)),9.)*fac*(0.5+0.5*sin(uTime*1.3+sv*40.));
   c+=vec3(1.0,0.95,0.85)*flare*6.;
   c*=uColA;c*=mix(vec3(1.0,0.90,0.76),vec3(1.0),pow(mu,0.45)); // the limb is dimmer and a little redder, as on the real Sun
-  gl_FragColor=vec4(c*limb*1.16,1.0);return;
+  gl_FragColor=vec4(c*limb*1.16,1.0);
  }
- if(uType==0){
+ #else
+ #if PTYPE==0
+ {
   float hiE=smoothstep(7.,11.,po),hiE2=smoothstep(10.,14.,po);
   if(uReal>0.5){
    vec2 uv=eqUV(p);vec3 day=texture2D(uMapA,uv).rgb;vec3 aux=texture2D(uMapC,uv).rgb;
@@ -1066,7 +1071,9 @@ void main(){
   float nightMask=smoothstep(0.08,-0.12,dot(p,L));
   emit=vec3(1.0,0.70,0.38)*lights*nightMask*1.4*(1.-uP1.x);
   }
- } else if(uType==1){
+ }
+ #elif PTYPE==1
+ {
   float levels=clamp((po-3.6)/1.38,1.,7.);
   float base=cl_fbm(p*2.5+uSeed,clamp(OC(2.5),2.,12.));
   float maria=smoothstep(0.47,0.56,cl_fbm(p*1.3+uSeed*3.1,5.))*uP1.y;
@@ -1104,7 +1111,9 @@ void main(){
   col=mix(col,vec3(0.95,0.95,0.97),cap);
   hb=(uReal>1.5&&uReal<2.5?elv*0.75+(base-0.5)*0.04:(base-0.5)*0.25)+cr*uP1.x*0.16*(1.-maria*0.6)+rm*0.08+micro*0.0028*smoothstep(0.,2.5,OC(700.))+dun*0.003;
   col*=(1.0+clamp(cr,0.,0.4)*0.4*uP1.x)*(1.0-clamp(-cr,0.,0.6)*0.3*uP1.x);
- } else {
+ }
+ #else
+ {
   float lat=p.y;
   float ang=uTime*uP1.z*(0.6+0.4*sin(lat*17.));
   float ca=cos(ang),sa=sin(ang);
@@ -1135,10 +1144,17 @@ void main(){
   float mu=max(dot(p,V),0.);
   col*=0.6+0.4*pow(mu,0.35);
  }
+ #endif
  vec3 N=p;
- if(uType!=2){N=perturb(vObj,p,hb*uBump);}
+ #if PTYPE!=2
+ N=perturb(vObj,p,hb*uBump);
+ #endif
  float slope=1.-dot(N,p);
- if(uType==0){col=mix(col,vec3(0.33,0.30,0.27),smoothstep(0.04,0.16,slope)*(1.-spec)*0.8);}else if(uType==1){col*=1.-smoothstep(0.05,0.2,slope)*0.25;}
+ #if PTYPE==0
+ col=mix(col,vec3(0.33,0.30,0.27),smoothstep(0.04,0.16,slope)*(1.-spec)*0.8);
+ #elif PTYPE==1
+ col*=1.-smoothstep(0.05,0.2,slope)*0.25;
+ #endif
  float gL=dot(p,L);
  float geo=smoothstep(-0.06,0.12,gL);
  float diff=max(dot(N,L),0.)*geo*(1.-cshadow);
@@ -1151,6 +1167,7 @@ void main(){
  lit+=uRim*fres*smoothstep(-0.25,0.5,gL)*0.8;
  lit=mix(lit,lit*vec3(1.1,0.72,0.5),smoothstep(0.25,0.0,gL)*geo*step(0.01,length(uRim))*0.5);
  gl_FragColor=vec4(lit,1.0);
+ #endif
 }`;
 
 const FLARE_FRAG=FRAG_HEAD+`
@@ -1305,7 +1322,7 @@ vec2 d=gl_PointCoord-0.5;float r2=dot(d,d)*4.;if(r2>1.)discard;gl_FragColor=vec4
 function extOpts(m){m.extensions={derivatives:true,fragDepth:true};return m;}
 const C3=a=>new V3(a[0],a[1],a[2]);
 function planetMaterial(s){
-  return extOpts(new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:PLANET_FRAG,uniforms:{
+  return extOpts(new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:PLANET_FRAG,defines:{PTYPE:s.type|0},uniforms:{
     uType:{value:s.type},uSunObj:{value:new V3(1,0,0)},uCamObj:{value:new V3(0,0,5)},
     uColA:{value:C3(s.A||[.5,.5,.5])},uColB:{value:C3(s.B||[.3,.3,.3])},uColC:{value:C3(s.C||[.7,.7,.7])},uColD:{value:C3(s.D||[.2,.2,.2])},
     uRim:{value:C3(s.rim||[0,0,0])},uStormCol:{value:C3(s.stormCol||[0,0,0])},
@@ -4173,14 +4190,20 @@ addEventListener('keydown',e=>{if(!TV.on)return;const k=e.key;let used=true;
 // renderer.compile only hands the shaders to the GPU; with Chrome's parallel compiling (KHR_parallel_shader_compile) we can then ask,
 // without waiting, whether each one is finished. The explorer draws its first frames behind the title only after that, so the page never freezes.
 const WARM={state:0};
-function warmShaders(){if(WARM.state)return;WARM.state=1;
-  try{scene.updateMatrixWorld();renderer.compile(scene,camera);}catch(e){WARM.state=2;return;}
-  const gl=renderer.getContext(),ext=gl.getExtension('KHR_parallel_shader_compile'),t0=performance.now();
-  if(!ext){WARM.state=2;return;}
+// Every program is linked first and none is queried until all are done, so Chrome compiles them side by side on its worker threads
+// (three.js r128 would otherwise wait for each one in turn, freezing the title screen). While they compile, three.js is told the programs
+// have no uniforms; once all are finished those placeholder programs are dropped, and the real ones come straight from Chrome's program cache.
+function warmShaders(done){if(WARM.state)return;WARM.state=1;
+  const gl=renderer.getContext(),ext=gl.getExtension('KHR_parallel_shader_compile'),t0=performance.now(),mats=new Set();
+  const fin=()=>{if(WARM.state===2)return;mats.forEach(m=>{try{m.dispose();}catch(e){}});WARM.state=2;done();};
+  if(ext){scene.traverse(o=>{const m=o.material;if(m)(Array.isArray(m)?m:[m]).forEach(x=>mats.add(x));});
+    const gpp=gl.getProgramParameter;gl.getProgramParameter=function(p,n){return n===gl.ACTIVE_UNIFORMS||n===gl.ACTIVE_ATTRIBUTES?0:gpp.call(this,p,n);};
+    try{scene.updateMatrixWorld();renderer.compile(scene,camera);}catch(e){}
+    delete gl.getProgramParameter;}
+  else{try{scene.updateMatrixWorld();renderer.compile(scene,camera);}catch(e){}fin();return;}
   const poll=()=>{let ok=true;try{for(const p of renderer.info.programs||[])if(!gl.getProgramParameter(p.program,ext.COMPLETION_STATUS_KHR)){ok=false;break;}}catch(e){}
-    if(ok||!window.__intro||performance.now()-t0>20000){WARM.state=2;return;}setTimeout(poll,120);};
-  poll();}
-if(window.__intro){addEventListener('cosmossian:entered',()=>{WARM.state=2;},{once:true});setTimeout(()=>(window.requestIdleCallback||setTimeout)(warmShaders,{timeout:1500}),250);}else WARM.state=2;
+    if(ok||performance.now()-t0>24000)fin();else setTimeout(poll,100);};
+  setTimeout(poll,100);}
 
 // satellites, debris and meteorites are not needed on the title screen: fetch them once the visitor is in
 afterEntry(()=>{const get=(u,f)=>fetch(u).then(r=>r.ok?r.json():null).then(j=>{if(j)f(j);}).catch(()=>{});
@@ -4246,7 +4269,7 @@ canvas.addEventListener('pointerleave',()=>{if(hovL){hovL.el.classList.remove('h
 function frame(now){
   requestAnimationFrame(frame);
   const dt=Math.min(0.1,(now-last)/1000);last=now;
-  if(window.__intro){if(WARM.state<2||(frame.held=(frame.held||0)+1)>12)return;} // explorer waits behind the entrance screen, and draws its first frames only once the shaders are ready
+  if(WARM.state===1||(window.__intro&&(WARM.state<2||(frame.held=(frame.held||0)+1)>12)))return; // explorer waits behind the entrance screen, and draws its first frames only once the shaders are ready
   REAL.tick(now);ISS.tick();
   updateBodies(dt);
   updateTrueScale();
@@ -4310,7 +4333,9 @@ buildSky('Sun');
 C.focus=null;scene.updateMatrixWorld();SUN.pivot.getWorldPosition(C.fixed);C.gFixed.copy(C.fixed);freeLimits();applyTierUI();select({type:'body',key:'sun'});
 camera.position.set(0,400,700);camera.lookAt(0,0,0);
 requestAnimationFrame(t=>{last=t;frame(t);});
-window.__explorerReady=true;dispatchEvent(new Event('cosmossian:ready'));
+{const ready=()=>{window.__explorerReady=true;dispatchEvent(new Event('cosmossian:ready'));};
+ // on the title screen, the shaders compile first; the entrance waits for them (up to 25 s) so the explorer opens without a freeze
+ if(window.__intro)setTimeout(()=>warmShaders(ready),60);else{WARM.state=2;ready();}}
 
 })();
 </script>
