@@ -2139,6 +2139,21 @@ const REAL={loaded:{},want:{earth:{f:['earth_day.jpg','earth_night.jpg','earth_a
 /* Textures load on demand, not at startup: a body's photo is fetched once it is a few pixels across on screen or is the focus.
    Files listed in HI exist as 2048 px copies in tex/2k/; the 4096 px originals are used only up close, on desktops whose GPU takes them.
    Until a photo arrives the generated surface is shown, so nothing waits on these files. */
+/* Today's clouds. The Worker keeps yesterday's NASA GIBS view of the whole Earth (VIIRS true colour, one day composite).
+   Here its clouds (bright, colourless pixels) replace the clouds of the static map in the blue channel of Earth's aux map,
+   which drives both the cloud layer and its shadows. Where the satellite saw nothing (polar night) the static clouds stay. */
+const TODAY={img:null,date:'',state:0,
+  clouds(b,aux){const go=()=>{try{const W=aux.image.width,H=aux.image.height,c=document.createElement('canvas');c.width=W;c.height=H;
+      const g=c.getContext('2d',{willReadFrequently:true});g.drawImage(TODAY.img,0,0,W,H);const T=g.getImageData(0,0,W,H).data;g.drawImage(aux.image,0,0);const A=g.getImageData(0,0,W,H),a=A.data;
+      for(let y=0;y<H;y++){const lat=Math.abs(90-180*(y+0.5)/H),ice=Math.min(1,Math.max(0,(lat-58)/12))*0.65; // snow and ice look like cloud: trust the static map more toward the poles
+        for(let x=0,i=y*W*4;x<W;x++,i+=4){const r=T[i],gg=T[i+1],bb=T[i+2],mx=Math.max(r,gg,bb);if(mx<10)continue;
+          const sat=(mx-Math.min(r,gg,bb))/mx,cl=Math.min(1,Math.max(0,(mx/255-0.30)/0.42))*Math.min(1,Math.max(0,1-(sat-0.10)/0.22));
+          a[i+2]=Math.round(255*cl*(1-ice)+a[i+2]*ice);}}
+      g.putImageData(A,0,0);const t=new THREE.CanvasTexture(c);['wrapS','wrapT','anisotropy','minFilter','magFilter','encoding'].forEach(p=>t[p]=aux[p]);t.__real=true;
+      b.mesh.material.uniforms.uMapC.value=t;if(b.extras[0])b.extras[0].material.uniforms.uMapC.value=t;aux.dispose();}catch(e){console.warn('today\u2019s clouds not applied',e);}};
+    if(TODAY.img){go();return;}if(TODAY.state)return;TODAY.state=1;
+    fetch('api/earth-today.jpg').then(r=>{if(!r.ok)throw new Error(r.status);TODAY.date=r.headers.get('X-Earth-Date')||'';return r.blob();})
+      .then(bl=>{const im=new Image();im.onload=()=>{TODAY.img=im;go();if(selected&&selected.type==='body'&&selected.key==='earth')teleMore(selected);};im.src=URL.createObjectURL(bl);}).catch(()=>{TODAY.state=0;});}};
 REAL.state={};REAL.HI=new Set(['earth_day.jpg','earth_night.jpg','earth_aux.jpg','moon_color.jpg','jupiter.jpg','saturn.jpg','neptune.jpg']);
 REAL.big=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').matches&&renderer.capabilities.maxTextureSize>=8192;
 (()=>{const loader=new THREE.TextureLoader(),maxA=renderer.capabilities.getMaxAnisotropy();
@@ -2149,7 +2164,7 @@ REAL.big=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').m
       if(k==='earth'){b.extras.forEach((cm,i)=>{if(i===0){cm.material.uniforms.uMapC.value=tx[2];cm.material.uniforms.uReal.value=1;}else cm.visible=false;});}
       // a sharper set replaces a softer one: free the old photos (generated surfaces are not THREE.Texture photos from this loader)
       if(REAL.state[k]===4)old.forEach(t=>{if(t&&t.isTexture&&!tx.includes(t)&&t.__real)t.dispose();});
-      tx.forEach(t=>t.__real=true);REAL.loaded[k]=true;};
+      tx.forEach(t=>t.__real=true);REAL.loaded[k]=true;if(k==='earth'&&tx[2])TODAY.clouds(b,tx[2]);};
   // 1: load the 2048 set (or the only size there is); 3: load the 4096 set. state 2 = soft set in place, 4 = sharp set in place
   REAL.load=(k,sharp)=>{const W=REAL.want[k],st=REAL.state[k]||0;if(!W)return;
     if(!sharp&&st)return;if(sharp&&(st!==2||!W.f.some(f=>REAL.HI.has(f))))return;
@@ -2702,7 +2717,7 @@ function teleMore(s){const el=$('#tMore');if(!el)return;let rows=[],extra='';
     else if(b.exo){const S=b.insol;if(S)rows.push(['Sunlight received',(S<0.1?S.toFixed(3):fmt(S,2))+' × Earth'],['Equilibrium temperature','≈ '+fmt(255*Math.pow(S,0.25))+' K (if it reflects light like Earth)']);
       if(b.ecc)rows.push(['Orbit eccentricity',fmt(b.ecc,3)]);rows.push(['Radius',fmt(b.Re,2)+' × Earth'+(b.est?' (estimated from mass)':' (measured)')]);
       if(b.disc&&b.disc[1])rows.push(['Discovered',b.disc[1]+(METH[b.disc[0]]?' · by '+METH[b.disc[0]]:'')]);{const de=DISC_EXO[b.starName],who=de&&(de[b.letter]||de['*']);rows.push(['Discovered by',who||'not recorded in the catalogue']);}rows.push(['Host star',b.starName]);}
-    else if(b.sys==='sol'&&(b.kind==='planet'||b.kind==='moon')){const gm=GMS[b.key];
+    else if(b.sys==='sol'&&(b.kind==='planet'||b.kind==='moon')){const gm=GMS[b.key];if(b.key==='earth'&&TODAY.date)rows.push(['Clouds','as seen by NASA satellites on '+TODAY.date]);
       if(gm){const m=gm/G_KM,g=gm/(b.Rkm*b.Rkm)*1000,ve=Math.sqrt(2*gm/b.Rkm),rho=m/(4/3*Math.PI*Math.pow(b.Rkm*1e5,3))*1000;
         const e=Math.floor(Math.log10(m));rows.push(['Mass',fmt(m/Math.pow(10,e),3)+' × 10^'+e+' kg · '+fmt(gm/398600.44,gm/398600.44<0.1?4:2)+' × Earth'],['Surface gravity',fmt(g,2)+' m/s² · '+fmt(g/9.80665,2)+' g'],['Escape velocity',fmt(ve,2)+' km/s'],['Mean density',fmt(rho,2)+' g/cm³']);}
       if(b.rotH)rows.push(['Day (one rotation)',Math.abs(b.rotH)<48?fmt(Math.abs(b.rotH),1)+' hours':fmt(Math.abs(b.rotH)/24,1)+' Earth days'+(b.rotH<0?' · backwards':'')]);
