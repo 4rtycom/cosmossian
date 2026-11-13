@@ -52,7 +52,7 @@ export default {
     if (event.cron === '*/30 * * * *') { ctx.waitUntil(refreshAll(env, ['space'])); return; }
     // every run refreshes satellites; exoplanets once a day; small bodies once a week
     const h = new Date(event.scheduledTime).getUTCHours(), d = new Date(event.scheduledTime).getUTCDay();
-    const jobs = ['sats', 'iss', 'earth']; // earth: fetches only when a new day of imagery is out
+    const jobs = ['sats', 'iss', 'earth', 'craft']; // earth: fetches only when a new day of imagery is out
     if (h < 3) jobs.push('exo');
     if (h < 3 && d === 1) jobs.push('sb');
     ctx.waitUntil(refreshAll(env, jobs));
@@ -153,7 +153,7 @@ async function page(request, env) {
   const res = await env.ASSETS.fetch(new Request(new URL('/', request.url), request));
   if (!res.ok || !(res.headers.get('content-type') || '').includes('text/html')) return res;
   if (!env.LIVE) return res;
-  const [sats, exo, sb, meta, iss, space] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta', 'block:iss', 'block:space'].map(k => env.LIVE.get(k)));
+  const [sats, exo, sb, meta, iss, space, craft] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta', 'block:iss', 'block:space', 'block:craft'].map(k => env.LIVE.get(k)));
   // the stored blocks are JSON from outside feeds. Inside a <script> tag, HTML escaping would corrupt them, and raw "<" could close
   // the tag and inject markup. So <, > and & are written as JSON \u escapes: still the same JSON, but it can never leave the tag.
   const safe = s => s.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -165,6 +165,7 @@ async function page(request, env) {
     .on('script#livemeta', put('livemeta', meta))
     .on('script#iss', put('iss', iss))
     .on('script#space', put('space', space))
+    .on('script#craft', put('craft', craft))
     .transform(res);
   const h = new Headers(out.headers);
   h.set('Cache-Control', 'public, max-age=300');
@@ -173,7 +174,7 @@ async function page(request, env) {
 
 /* ---------- refresh jobs ---------- */
 async function refreshAll(env, only) {
-  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth, space: refreshSpace, iss: refreshISS };
+  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth, space: refreshSpace, iss: refreshISS, craft: refreshCraft };
   const meta = JSON.parse((await env.LIVE.get('meta')) || '{}');
   const report = {};
   for (const k of Object.keys(jobs)) {
@@ -302,6 +303,33 @@ async function refreshISS(env) {
   if (!el) { const t = await getJSON('https://api.wheretheiss.at/v1/satellites/25544/tles'); if (t && t.line1 && t.line2) { el = tleToElements(t.line1, t.line2); src = 'wheretheiss.at (TLE)'; } }
   if (!el || !(el.MEAN_MOTION > 14 && el.MEAN_MOTION < 17) || !(el.INCLINATION > 51 && el.INCLINATION < 52.5)) throw new Error('no usable ISS elements');
   return { block: 'iss', n: 1, src, text: JSON.stringify(Object.assign(el, { src })) };
+}
+
+// spacecraft positions from JPL Horizons: heliocentric ecliptic (J2000) x, y, z in AU, one per day from 10 days ago to 60 days ahead.
+// Fetched once per day; a mission that Horizons cannot answer for is simply left out.
+const CRAFT = [['voyager1', -31], ['voyager2', -32], ['newhorizons', -98], ['parker', -96], ['jwst', -170], ['juno', -61], ['europaclipper', -159],
+  ['psyche', -255], ['lucy', -49], ['juice', -28], ['bepicolombo', -121], ['solarorbiter', -144], ['hera', -91]];
+async function refreshCraft(env, meta) {
+  const day = new Date().toISOString().slice(0, 10);
+  if (meta && meta.craft && meta.craft.date === day) return { skip: 'already have ' + day };
+  const d0 = new Date(Date.parse(day) - 10 * 86400000).toISOString().slice(0, 10), d1 = new Date(Date.parse(day) + 60 * 86400000).toISOString().slice(0, 10);
+  const out = []; let t0 = null;
+  for (const [k, id] of CRAFT) {
+    try {
+      const q = new URLSearchParams({ format: 'json', COMMAND: `'${id}'`, OBJ_DATA: "'NO'", MAKE_EPHEM: "'YES'", EPHEM_TYPE: "'VECTORS'", CENTER: "'500@10'",
+        START_TIME: `'${d0}'`, STOP_TIME: `'${d1}'`, STEP_SIZE: "'1 d'", VEC_TABLE: "'1'", REF_PLANE: "'ECLIPTIC'", OUT_UNITS: "'AU-D'", CSV_FORMAT: "'YES'" });
+      const j = await getJSON('https://ssd.jpl.nasa.gov/api/horizons.api?' + q);
+      const m = /\$\$SOE\n([\s\S]*?)\$\$EOE/.exec((j && j.result) || ''); if (!m) continue;
+      const rows = m[1].trim().split('\n').map(l => l.split(',').map(x => x.trim()));
+      if (rows.length < 30) continue;
+      if (t0 === null) t0 = +rows[0][0];
+      if (Math.abs(+rows[0][0] - t0) > 1e-6) continue; // every craft on the same daily grid
+      const p = []; for (const r of rows) p.push(+(+r[2]).toFixed(6), +(+r[3]).toFixed(6), +(+r[4]).toFixed(6));
+      out.push({ k, id, p });
+    } catch (e) { /* skip this one */ }
+  }
+  if (out.length < 5) throw new Error('JPL Horizons answered for only ' + out.length + ' spacecraft');
+  return { block: 'craft', n: out.length, src: 'JPL Horizons', date: day, text: JSON.stringify({ t0, step: 1, date: day, craft: out }) };
 }
 
 // confirmed exoplanets -> the app's catalogue format, grouped by host star

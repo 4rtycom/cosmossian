@@ -109,6 +109,10 @@ Every scheduled run checks for a new day of NASA GIBS imagery (VIIRS NOAA-20 tru
 
 A second cron trigger (`*/30 * * * *`) runs only the `space` job: NOAA SWPC's OVATION aurora forecast (packed to a 2° grid, `block:space`, written into `<script id="space">`), the latest planetary Kp index and the past week's GOES X-ray flares. Earth's aurora is drawn from the OVATION grid at its real geographic position (it turns with Earth); without data it falls back to the old fixed oval. The Earth card shows the forecast time and Kp, the Sun card the strongest and latest flares.
 
+## Spacecraft
+
+A daily `craft` job asks JPL Horizons for the heliocentric ecliptic position of 13 missions (Voyager 1 and 2, New Horizons, Parker Solar Probe, JWST, Juno, Europa Clipper, Psyche, Lucy, JUICE, BepiColombo, Solar Orbiter, Hera), one point per day from 10 days back to 60 days ahead (`block:craft`, ~30 KB, written into `<script id="craft">`). The page interpolates them to the simulation date, labels them, and gives each a card (distance from the Sun and Earth, light-time, speed, launch). Craft within 0.05 AU of a planet are drawn just outside that planet's globe in their true direction, because planets are drawn much larger than true scale. Mission texts are in `CRAFT_INFO` in `public/index.html`.
+
 ## Routes
 
 | Path | Behavior |
