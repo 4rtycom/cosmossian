@@ -320,6 +320,13 @@ body.cockpit #hint{display:none}
 #introGo:focus-visible{outline:2px solid #fff;outline-offset:5px}
 @media (max-width:520px){#introName{letter-spacing:.2em;margin-right:-.2em}#introTag{letter-spacing:.26em;margin-right:-.26em}#introGo{min-height:56px;padding:0 34px;font-size:16px}}
 @media (max-height:440px){.intro-c{gap:12px}#introName{font-size:clamp(26px,9vh,48px)}#introLogo{max-height:30vh}}
+body.nohud .leftcol,body.nohud .dock,body.nohud .rail,body.nohud #lblPanel{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
+.leftcol,.dock,.rail{transition:opacity .35s ease,visibility .35s}
+#hudShow{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:60;width:42px;height:42px;border-radius:12px;display:none;place-items:center;padding:0;cursor:pointer;color:#e6e9ee;background:rgba(10,14,20,.45);border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:.3;transition:opacity .4s ease}
+#hudShow svg{width:18px;height:18px}
+body.nohud #hudShow{display:grid}
+body.nohud.hudpeek #hudShow,#hudShow:hover,#hudShow:focus-visible{opacity:1}
+#hudShow:focus-visible{outline:2px solid #fff;outline-offset:3px}
 #introWait{position:absolute;left:0;right:0;bottom:calc(84px + env(safe-area-inset-bottom,0px));margin:0;text-align:center;font-family:Inter,system-ui,sans-serif;font-size:12px;letter-spacing:.08em;color:#9aa1ab;opacity:0;transition:opacity .6s ease;pointer-events:none}
 #intro.wait #introWait{opacity:1}
 .intro-human{display:flex;flex-direction:column;align-items:center;gap:10px;min-height:20px;margin-top:-6px}
@@ -612,7 +619,7 @@ body.cockpit .rail{display:none}
     <button id="bToday" class="pill" type="button" title="Jump back to today's date">Now</button>
     <span class="pillsep" aria-hidden="true"></span>
     <button id="bQuality" class="pill on" type="button" title="Switch between maximum detail and smoother motion">Quality: Ultra</button>
-    <button id="bSound" class="pill" type="button" title="Ambient sound on or off">Sound</button>
+    <button id="bHud" class="pill" type="button" title="Hide the interface (H)">Hide interface</button>
     <button id="bHelp" class="pill" type="button" title="How to use Cosmossian (?)">Help</button>
     <a id="bCoffee" class="pill coffee" href="https://buymeacoffee.com/glennkuipers" target="_blank" rel="noopener noreferrer" title="Support Cosmossian"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h8v4.200a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M11 7h1.300a1.700 1.700 0 0 1 0 3.400H11"/><path d="M5.500 1.800v1.800M8.500 1.800v1.800"/></svg>Buy me a coffee</a>
     </div>
@@ -785,7 +792,7 @@ addEventListener('resize',resize);resize();
     bOrbits:['Orbits','<circle cx="8" cy="8" r="1.700"/><ellipse cx="8" cy="8" rx="6.600" ry="3" transform="rotate(-25 8 8)"/>'],
     bToday:['Jump to today','<circle cx="8" cy="8" r="6.300"/><path d="M8 4.500v3.700l2.400 1.400"/>'],
     bQuality:['Quality','<path d="M8 1.500l1.700 4.800 4.800 1.700-4.800 1.700-1.700 4.800-1.700-4.800-4.800-1.700 4.800-1.700z"/>'],
-    bSound:['Sound','<path d="M2.500 6v4h2.500l3.500 3v-10l-3.500 3z"/><path d="M11 5.500a3.500 3.500 0 0 1 0 5"/>'],
+    bHud:['Hide interface (H)','<path d="M2 5.500V2h3.500M10.500 2H14v3.500M14 10.500V14h-3.500M5.500 14H2v-3.500"/>'],
     bHelp:['Help','<circle cx="8" cy="8" r="6.500"/><path d="M6.300 6.300a1.800 1.800 0 1 1 2.600 1.600c-.6.300-.9.700-.9 1.400"/><path d="M8 11.700v.1"/>']};
   const rail=document.createElement('nav');rail.className='rail';rail.setAttribute('aria-label','Actions');
   const add=(el,tip,ic,sec)=>{if(!el)return;el.classList.remove('pill','infobtn');el.classList.add('ric');if(sec)el.classList.add('sec');el.dataset.tip=tip;if(!el.getAttribute('aria-label'))el.setAttribute('aria-label',tip);if(ic)el.style.setProperty('--ic',svg(ic));rail.appendChild(el);};
@@ -793,7 +800,7 @@ addEventListener('resize',resize);resize();
   // top to bottom: fly, zoom, view tools, help and support, then the fold key
   add(q('#bCockpit'),...IC.bCockpit);div();
   [['#zIn','Zoom in','<path d="M8 3v10M3 8h10"/>'],['#zOut','Zoom out','<path d="M3 8h10"/>']].forEach(([s,t,ic])=>{const e=q(s);if(e){add(e,t,ic);}});div(true);
-  ['bReset','bLabels','bOrbits','bToday','bQuality','bSound'].forEach(id=>add(q('#'+id),IC[id][0],IC[id][1],true));div(true);
+  ['bReset','bLabels','bOrbits','bToday','bQuality','bHud'].forEach(id=>add(q('#'+id),IC[id][0],IC[id][1],true));div(true);
   {const hb=document.createElement('button');hb.type='button';hb.id='bHome';hb.addEventListener('click',()=>{try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}location.reload();});
     add(hb,'Back to the title screen','<path d="M2.500 7.500L8 3l5.500 4.500"/><path d="M4 6.500V13h3V9.500h2V13h3V6.500"/>',true);}
   add(q('#bHelp'),IC.bHelp[0],IC.bHelp[1],true);add(q('#bCoffee'),'Buy me a coffee',null,true);add(q('#bAbout'),'About the data',null,true);div();
@@ -3324,7 +3331,6 @@ function cockpitUpdate(dt){
   camera.updateMatrixWorld();
   CK.vkm=phys&&CK.orb?CK.orb.v:CK.vel.length()*kmPerUnit();
   if(cabin&&cabin.eng){const th=Math.min(1,Math.abs(f)+((k.ShiftLeft||k.ShiftRight)?0.4:0));cabin.eng.gain.setTargetAtTime(th*0.9,audio.ctx.currentTime,0.12);cabin.engF.frequency.setTargetAtTime(110+160*th,audio.ctx.currentTime,0.2);}
-  if(audio&&soundOn){audio.lp.frequency.setTargetAtTime(380+260*Math.min(1,Math.abs(f)+CK.vel.length()/Math.max(sc,1e-6)*0.5),audio.ctx.currentTime,0.3);}
 }
 function drawHUD(){
   const W=innerWidth,H=innerHeight,cx=W/2,cy=H*0.42;hctx.clearRect(0,0,W,H);hctx.shadowColor='rgba(80,255,150,.6)';hctx.shadowBlur=3;
@@ -3817,7 +3823,7 @@ function ckBoundaries(dt){
 }
 /* ---------- Space Shuttle cabin ambience: 400 Hz avionics hum, cabin fans, quindar tones and radio static ---------- */
 let cabin=null;
-function startCabin(){if(!audio)audio=startAudio();if(!audio)return;const ctx=audio.ctx;
+function startCabin(){if(!audioCtx())return;const ctx=audio.ctx;
   const out=ctx.createGain();out.gain.value=0;out.connect(ctx.destination);
   const hum=ctx.createOscillator();hum.frequency.value=400;const hg=ctx.createGain();hg.gain.value=0.012;hum.connect(hg);hg.connect(out);hum.start();
   const hum2=ctx.createOscillator();hum2.frequency.value=800;const hg2=ctx.createGain();hg2.gain.value=0.004;hum2.connect(hg2);hg2.connect(out);hum2.start();
@@ -3894,48 +3900,27 @@ addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.target.type!=='r
   if(e.code.startsWith('Arrow')||e.code==='Space')e.preventDefault();});
 addEventListener('keyup',e=>{CK.keys[e.code]=false;});
 addEventListener('blur',()=>{CK.keys={};});
-/* ================= AUDIO ================= */
-let audio=null,soundOn=false;
-// Space ambience, synthesised (no audio files). The deep drone alone sits below the range of laptop and phone speakers, so it is
-// layered with a slow mid-range pad, a soft "solar wind" of filtered noise and, now and then, a faint chime with a long echo.
-function startAudio(){
-  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
+/* ================= AUDIO (cockpit cabin only) ================= */
+let audio=null;
+function audioCtx(){if(audio)return audio;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
   try{if(navigator.audioSession)navigator.audioSession.type='playback';}catch(e){} // iPhone: play even with the ringer switch on silent (Safari 17+)
-  const ctx=new AC();
-  const comp=ctx.createDynamicsCompressor();comp.threshold.value=-18;comp.ratio.value=3;comp.attack.value=0.05;comp.release.value=0.4;comp.connect(ctx.destination);
-  const master=ctx.createGain();master.gain.value=0;master.connect(comp);
-  const lfo=(f,amt,param,type)=>{const o=ctx.createOscillator();o.type=type||'sine';o.frequency.value=f;const g=ctx.createGain();g.gain.value=amt;o.connect(g);g.connect(param);o.start();return o;};
-  // 1. the deep drone (as before); the cockpit opens this filter up with speed
-  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=420;lp.Q.value=.7;const dg=ctx.createGain();dg.gain.value=0.4;lp.connect(dg);dg.connect(master);
-  [[55,'sine',.5],[55.35,'sine',.5],[82.4,'triangle',.16],[110.3,'triangle',.07],[164.8,'sine',.03]].forEach(([f,t,g])=>{const o=ctx.createOscillator();o.type=t;o.frequency.value=f;const gn=ctx.createGain();gn.gain.value=g;o.connect(gn);gn.connect(lp);o.start();});
-  const buf=ctx.createBuffer(1,ctx.sampleRate*4,ctx.sampleRate),d=buf.getChannelData(0);let last=0;for(let i=0;i<d.length;i++){last=(last+0.02*(Math.random()*2-1))/1.02;d[i]=last*3.5;}
-  const src=ctx.createBufferSource();src.buffer=buf;src.loop=true;const ng=ctx.createGain();ng.gain.value=.35;src.connect(ng);ng.connect(lp);src.start();
-  lfo(.05,180,lp.frequency);
-  // 2. pad: an open A chord, each note a detuned pair, swelling slowly in and out on its own cycle
-  const padF=ctx.createBiquadFilter();padF.type='lowpass';padF.frequency.value=900;padF.Q.value=0.5;lfo(.031,350,padF.frequency);
-  const pad=ctx.createGain();pad.gain.value=1.6;padF.connect(pad);pad.connect(master);
-  [110,164.81,220,246.94,329.63,440].forEach((f,i)=>{const v=ctx.createGain();v.gain.value=0.06/(1+i*0.25);v.connect(padF);
-    [-4,4].forEach(c=>{const o=ctx.createOscillator();o.type=i<2?'triangle':'sawtooth';o.frequency.value=f;o.detune.value=c+(i*1.7);o.connect(v);o.start();});
-    lfo(0.017+i*0.0061,0.045/(1+i*0.25),v.gain);});
-  // 3. solar wind: noise through a slowly wandering band-pass
-  const nb=ctx.createBuffer(1,ctx.sampleRate*6,ctx.sampleRate),nd=nb.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
-  const ns=ctx.createBufferSource();ns.buffer=nb;ns.loop=true;const bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=700;bp.Q.value=0.9;lfo(.023,420,bp.frequency);
-  const wind=ctx.createGain();wind.gain.value=0.1;lfo(.013,0.06,wind.gain);ns.connect(bp);bp.connect(wind);wind.connect(master);ns.start();
-  // 4. chimes: soft high notes (A minor pentatonic) into a long, darkening echo
-  const echo=ctx.createDelay(2);echo.delayTime.value=0.62;const fb=ctx.createGain();fb.gain.value=0.55;const ef=ctx.createBiquadFilter();ef.type='lowpass';ef.frequency.value=2600;
-  const wet=ctx.createGain();wet.gain.value=0.6;echo.connect(ef);ef.connect(fb);fb.connect(echo);ef.connect(wet);wet.connect(master);
-  const NOTES=[880,987.77,1318.51,1567.98,1760,2093];
-  const chime=t=>{const f=NOTES[(Math.random()*NOTES.length)|0];[1,2.01].forEach((m,k)=>{const o=ctx.createOscillator();o.type='sine';o.frequency.value=f*m;const g=ctx.createGain();
-      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(k?0.012:0.05,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+3.5);o.connect(g);g.connect(echo);g.connect(master);o.start(t);o.stop(t+3.6);});};
-  let next=ctx.currentTime+1.5;chime(next);
-  const sched=()=>{if(ctx.state==='closed')return;while(next<ctx.currentTime+6){next+=4+Math.random()*7;chime(next);}setTimeout(sched,2000);};sched();
-  return{ctx,master,lp};
-}
-$('#bSound').addEventListener('click',e=>{
-  if(!audio){audio=startAudio();if(!audio){toast('This browser does not support Web Audio');return;}}
-  soundOn=!soundOn;const t=audio.ctx.currentTime;if(audio.ctx.state==='suspended')audio.ctx.resume();
-  audio.master.gain.cancelScheduledValues(t);audio.master.gain.setValueAtTime(audio.master.gain.value,t);audio.master.gain.linearRampToValueAtTime(soundOn?.32:0,t+(soundOn?2.5:.6));
-  e.currentTarget.classList.toggle('on',soundOn);});
+  audio={ctx:new AC()};return audio;}
+
+/* ================= INTERFACE ON/OFF =================
+   Hides every panel and bar so only the view is left. H toggles it; while hidden, a small button in the corner (brighter when the
+   pointer moves) brings it back. Labels in the scene, messages, dialogs and the cockpit's own instruments stay. */
+(function(){const b=$('#bHud');if(!b)return;
+  const show=document.createElement('button');show.type='button';show.id='hudShow';show.title='Show the interface (H)';show.setAttribute('aria-label','Show the interface');
+  show.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.500 2v3.500H2M14 5.500h-3.500V2M10.500 14v-3.500H14M2 10.500h3.500V14"/></svg>';
+  document.body.appendChild(show);
+  let peekT=0,told=false;const off=()=>document.body.classList.contains('nohud');
+  const set=h=>{document.body.classList.toggle('nohud',h);b.setAttribute('aria-pressed',String(h));
+    if(h){if(!told){told=true;toast('Interface hidden. Press H, or the button in the corner, to bring it back.',3600);}show.focus({preventScroll:true});}
+    else b.focus({preventScroll:true});};
+  b.addEventListener('click',()=>set(true));show.addEventListener('click',()=>set(false));
+  addEventListener('keydown',e=>{if((e.key==='h'||e.key==='H')&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!CK.on&&!window.__intro&&!/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)){e.preventDefault();set(!off());}});
+  addEventListener('pointermove',()=>{if(!off())return;document.body.classList.add('hudpeek');clearTimeout(peekT);peekT=setTimeout(()=>document.body.classList.remove('hudpeek'),2200);},{passive:true});
+})();
 
 /* ================= FRAME LOOP ================= */
 let catLblT=1,simJD=jdNow(),issJD=simJD,weather=0,last=performance.now(),teleT=0,fpsAcc=0,fpsN=0,fpsT=0;
