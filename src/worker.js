@@ -143,7 +143,7 @@ async function page(request, env) {
   const res = await env.ASSETS.fetch(new Request(new URL('/', request.url), request));
   if (!res.ok || !(res.headers.get('content-type') || '').includes('text/html')) return res;
   if (!env.LIVE) return res;
-  const [sats, exo, sb, meta] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta'].map(k => env.LIVE.get(k)));
+  const [sats, exo, sb, meta, iss] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta', 'block:iss'].map(k => env.LIVE.get(k)));
   // the stored blocks are JSON from outside feeds. Inside a <script> tag, HTML escaping would corrupt them, and raw "<" could close
   // the tag and inject markup. So <, > and & are written as JSON \u escapes: still the same JSON, but it can never leave the tag.
   const safe = s => s.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -153,6 +153,7 @@ async function page(request, env) {
     .on('script#exocat', put('exocat', exo))
     .on('script#smallbodies', put('smallbodies', sb))
     .on('script#livemeta', put('livemeta', meta))
+    .on('script#iss', put('iss', iss))
     .transform(res);
   const h = new Headers(out.headers);
   h.set('Cache-Control', 'public, max-age=300');
@@ -188,14 +189,15 @@ async function getJSON(u) {
 }
 
 // satellites and debris -> the app's packed format (7 x uint16 per object, base64)
-async function refreshSats() {
+async function refreshSats(env) {
   const RE = 6378.137, MU = 398600.4418, TAU = Math.PI * 2;
-  const seen = new Set(), rows = [];
+  const seen = new Set(), rows = []; let iss = null;
   for (const g of SAT_GROUPS) {
     let list;
     try { list = await getJSON(`https://celestrak.org/NORAD/elements/gp.php?GROUP=${g}&FORMAT=json`); } catch (e) { if (g === 'active') throw e; continue; }
     for (const o of list) {
       if (seen.has(o.NORAD_CAT_ID)) continue; seen.add(o.NORAD_CAT_ID);
+      if (o.NORAD_CAT_ID === 25544) iss = o;
       const name = String(o.OBJECT_NAME || '');
       const type = g !== 'active' || / DEB/.test(name) ? 3 : / R\/B/.test(name) ? 2 : 1;
       rows.push({ o, type });
@@ -216,6 +218,11 @@ async function refreshSats() {
   }
   const bytes = new Uint8Array(u.buffer, 0, n * 14);
   let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  // the ISS's own elements, for placing the 3D station on its real orbit
+  if (iss && env && env.LIVE) {
+    const keep = ['OBJECT_NAME', 'NORAD_CAT_ID', 'EPOCH', 'MEAN_MOTION', 'ECCENTRICITY', 'INCLINATION', 'RA_OF_ASC_NODE', 'ARG_OF_PERICENTER', 'MEAN_ANOMALY', 'MEAN_MOTION_DOT'];
+    await env.LIVE.put('block:iss', JSON.stringify(Object.assign(Object.fromEntries(keep.map(k => [k, iss[k]])), { src: 'CelesTrak' })));
+  }
   return { block: 'debris', n, src: 'CelesTrak', text: JSON.stringify({ t0, n, counts, b64: btoa(bin) }) };
 }
 
