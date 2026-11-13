@@ -3830,8 +3830,8 @@ function startCabin(){if(!audio)audio=startAudio();if(!audio)return;const ctx=au
     st.connect(f);f.connect(g);g.connect(out);st.start(t+0.3);st.stop(t+0.5+L);tone(2475,t+0.5+L,0.25);
     cabin.timer=setTimeout(radio,9000+Math.random()*16000);};
   const en=ctx.createBufferSource();en.buffer=buf;en.loop=true;const ef=ctx.createBiquadFilter();ef.type='lowpass';ef.frequency.value=150;const eg=ctx.createGain();eg.gain.value=0;en.connect(ef);ef.connect(eg);eg.connect(out);en.start();
-  cabin={out,eng:eg,engF:ef,timer:setTimeout(radio,3000)};out.gain.linearRampToValueAtTime(1,ctx.currentTime+1.5);if(ctx.state==='suspended')ctx.resume();}
-function stopCabin(){if(!cabin)return;clearTimeout(cabin.timer);const o=cabin.out,ctx=audio.ctx;o.gain.cancelScheduledValues(ctx.currentTime);o.gain.setValueAtTime(o.gain.value,ctx.currentTime);o.gain.linearRampToValueAtTime(0,ctx.currentTime+0.6);setTimeout(()=>o.disconnect(),800);cabin=null;$('#ckAudio').classList.remove('on');}
+  cabin={out,eng:eg,engF:ef,timer:setTimeout(radio,3000)};syncAudioSession();out.gain.linearRampToValueAtTime(1,ctx.currentTime+1.5);if(ctx.state==='suspended')ctx.resume();}
+function stopCabin(){if(!cabin)return;clearTimeout(cabin.timer);const o=cabin.out,ctx=audio.ctx;o.gain.cancelScheduledValues(ctx.currentTime);o.gain.setValueAtTime(o.gain.value,ctx.currentTime);o.gain.linearRampToValueAtTime(0,ctx.currentTime+0.6);setTimeout(()=>o.disconnect(),800);cabin=null;syncAudioSession();$('#ckAudio').classList.remove('on');}
 
 function warpFX(){warpT=1.4;}
 function drawWarp(dt){const W=innerWidth,H=innerHeight;wctx.clearRect(0,0,W,H);if(warpT<=0)return;warpT-=dt;const k=clamp(warpT/1.4,0,1),e=Math.sin(k*Math.PI);
@@ -3896,11 +3896,12 @@ addEventListener('keyup',e=>{CK.keys[e.code]=false;});
 addEventListener('blur',()=>{CK.keys={};});
 /* ================= AUDIO ================= */
 let audio=null,soundOn=false;
+// 'playback' ignores the iPhone silent switch (Safari 17+) but pauses other music. Give that exclusive session back when nothing here is audible.
+function syncAudioSession(){try{if(navigator.audioSession)navigator.audioSession.type=(soundOn||cabin)?'playback':'auto';}catch(e){}}
 // Space ambience, synthesised (no audio files). The deep drone alone sits below the range of laptop and phone speakers, so it is
 // layered with a slow mid-range pad, a soft "solar wind" of filtered noise and, now and then, a faint chime with a long echo.
 function startAudio(){
   const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
-  try{if(navigator.audioSession)navigator.audioSession.type='playback';}catch(e){} // iPhone: play even with the ringer switch on silent (Safari 17+)
   const ctx=new AC();
   const comp=ctx.createDynamicsCompressor();comp.threshold.value=-18;comp.ratio.value=3;comp.attack.value=0.05;comp.release.value=0.4;comp.connect(ctx.destination);
   const master=ctx.createGain();master.gain.value=0;master.connect(comp);
@@ -3933,7 +3934,7 @@ function startAudio(){
 }
 $('#bSound').addEventListener('click',e=>{
   if(!audio){audio=startAudio();if(!audio){toast('This browser does not support Web Audio');return;}}
-  soundOn=!soundOn;const t=audio.ctx.currentTime;if(audio.ctx.state==='suspended')audio.ctx.resume();
+  soundOn=!soundOn;syncAudioSession();const t=audio.ctx.currentTime;if(audio.ctx.state==='suspended')audio.ctx.resume();
   audio.master.gain.cancelScheduledValues(t);audio.master.gain.setValueAtTime(audio.master.gain.value,t);audio.master.gain.linearRampToValueAtTime(soundOn?.32:0,t+(soundOn?2.5:.6));
   e.currentTarget.classList.toggle('on',soundOn);});
 
