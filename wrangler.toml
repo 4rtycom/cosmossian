@@ -15,9 +15,10 @@ directory = "./public"
 binding = "ASSETS"
 run_worker_first = ["/", "/index.html", "/api/*"]
 
-# refresh live data every 3 hours (exoplanets daily, small bodies weekly)
+# refresh live data every 3 hours (exoplanets daily, small bodies weekly, NASA Earth imagery once per new day);
+# space weather (aurora forecast, Kp, flares) every 30 minutes
 [triggers]
-crons = ["7 */3 * * *"]
+crons = ["7 */3 * * *", "*/30 * * * *"]
 
 # where the refreshed data is kept (KV namespace "cosmossian-LIVE")
 [[kv_namespaces]]

@@ -105,6 +105,10 @@ The scheduled satellite refresh also stores the ISS's own orbital elements (Cele
 
 Every scheduled run checks for a new day of NASA GIBS imagery (VIIRS NOAA-20 true colour, global day composite; NOAA-21 or MODIS Terra if that day is missing) and stores yesterday's image in KV (`img:earth`, ~0.5 MB, fetched once per day). `GET /api/earth-today.jpg` serves it. When Earth's textures load, the page reads the clouds from it (bright, colourless pixels) and uses them for the cloud layer and cloud shadows instead of the static cloud map; polar night and other gaps keep the static clouds, and toward the poles the static map is trusted more because snow and ice also look white. The Earth card names the date.
 
+## Space weather
+
+A second cron trigger (`*/30 * * * *`) runs only the `space` job: NOAA SWPC's OVATION aurora forecast (packed to a 2° grid, `block:space`, written into `<script id="space">`), the latest planetary Kp index and the past week's GOES X-ray flares. Earth's aurora is drawn from the OVATION grid at its real geographic position (it turns with Earth); without data it falls back to the old fixed oval. The Earth card shows the forecast time and Kp, the Sun card the strongest and latest flares.
+
 ## Routes
 
 | Path | Behavior |
@@ -156,7 +160,7 @@ Create or confirm these in the Cloudflare account. This repo does not contain th
 | `TURNSTILE_SECRET` | Worker secret: secret key of the Turnstile widget "Cosmossian title screen" (site key is in `public/index.html`) |
 | `ASSETS` | assets binding for `./public` (declared in `wrangler.toml`) |
 | Worker name `cosmossian` | Workers script |
-| Cron trigger `7 */3 * * *` | scheduled trigger declared in `wrangler.toml` |
+| Cron triggers `7 */3 * * *`, `*/30 * * * *` | scheduled triggers declared in `wrangler.toml` |
 | `cosmossian.com` | custom domain route |
 | `www.cosmossian.com` | custom domain route |
 

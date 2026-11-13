@@ -48,6 +48,8 @@ export default {
     return secure(await route(request, env, ctx));
   },
   async scheduled(event, env, ctx) {
+    // every 30 minutes: space weather only (aurora forecast, Kp, flares)
+    if (event.cron === '*/30 * * * *') { ctx.waitUntil(refreshAll(env, ['space'])); return; }
     // every run refreshes satellites; exoplanets once a day; small bodies once a week
     const h = new Date(event.scheduledTime).getUTCHours(), d = new Date(event.scheduledTime).getUTCDay();
     const jobs = ['sats', 'earth']; // earth: fetches only when a new day of imagery is out
@@ -151,7 +153,7 @@ async function page(request, env) {
   const res = await env.ASSETS.fetch(new Request(new URL('/', request.url), request));
   if (!res.ok || !(res.headers.get('content-type') || '').includes('text/html')) return res;
   if (!env.LIVE) return res;
-  const [sats, exo, sb, meta, iss] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta', 'block:iss'].map(k => env.LIVE.get(k)));
+  const [sats, exo, sb, meta, iss, space] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta', 'block:iss', 'block:space'].map(k => env.LIVE.get(k)));
   // the stored blocks are JSON from outside feeds. Inside a <script> tag, HTML escaping would corrupt them, and raw "<" could close
   // the tag and inject markup. So <, > and & are written as JSON \u escapes: still the same JSON, but it can never leave the tag.
   const safe = s => s.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
@@ -162,6 +164,7 @@ async function page(request, env) {
     .on('script#smallbodies', put('smallbodies', sb))
     .on('script#livemeta', put('livemeta', meta))
     .on('script#iss', put('iss', iss))
+    .on('script#space', put('space', space))
     .transform(res);
   const h = new Headers(out.headers);
   h.set('Cache-Control', 'public, max-age=300');
@@ -170,7 +173,7 @@ async function page(request, env) {
 
 /* ---------- refresh jobs ---------- */
 async function refreshAll(env, only) {
-  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth };
+  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth, space: refreshSpace };
   const meta = JSON.parse((await env.LIVE.get('meta')) || '{}');
   const report = {};
   for (const k of Object.keys(jobs)) {
@@ -252,6 +255,36 @@ async function refreshEarth(env, meta) {
     return { n: 1, src: 'NASA GIBS ' + layer.split('_').slice(0, 2).join(' '), date, bytes: buf.byteLength };
   }
   throw new Error('no GIBS imagery for ' + date);
+}
+
+// space weather from NOAA SWPC: the OVATION aurora forecast (packed to a 2-degree grid of 0..255), the planetary Kp index
+// and the past week's solar X-ray flares
+async function refreshSpace() {
+  const ov = await getJSON('https://services.swpc.noaa.gov/json/ovation_aurora_latest.json');
+  if (!ov || !Array.isArray(ov.coordinates) || ov.coordinates.length < 60000) throw new Error('unexpected OVATION data');
+  const W = 180, H = 91, g = new Uint8Array(W * H);
+  for (const c of ov.coordinates) {
+    const x = Math.floor((((c[0] % 360) + 360) % 360) / 2) % W, y = Math.round((c[1] + 90) / 2), v = Math.min(255, Math.round(c[2] * 2.55)), i = y * W + x;
+    if (y >= 0 && y < H && v > g[i]) g[i] = v;
+  }
+  let kp = null, kpTime = null;
+  try {
+    const k = await getJSON('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'), last = k[k.length - 1];
+    if (Array.isArray(last)) { kp = +last[1]; kpTime = last[0]; } else { kp = +(last.Kp != null ? last.Kp : last.kp_index); kpTime = last.time_tag; }
+    if (!isFinite(kp)) kp = null;
+  } catch (e) { /* aurora still works without Kp */ }
+  let flare = null;
+  try {
+    const f = await getJSON('https://services.swpc.noaa.gov/json/goes/primary/xray-flares-7-day.json');
+    const size = c => { const m = /^([ABCMX])(\d+(?:\.\d+)?)/.exec(c || ''); return m ? { A: 1e-8, B: 1e-7, C: 1e-6, M: 1e-5, X: 1e-4 }[m[1]] * +m[2] : 0; };
+    const list = (Array.isArray(f) ? f : []).filter(x => x.max_class && x.max_time);
+    if (list.length) {
+      const top = list.reduce((a, b) => size(b.max_class) > size(a.max_class) ? b : a), last = list[list.length - 1];
+      flare = { max: { c: top.max_class, t: top.max_time }, last: { c: last.max_class, t: last.max_time }, n: list.length };
+    }
+  } catch (e) { /* optional */ }
+  let bin = ''; for (let i = 0; i < g.length; i += 0x8000) bin += String.fromCharCode.apply(null, g.subarray(i, i + 0x8000));
+  return { block: 'space', n: 1, src: 'NOAA SWPC', text: JSON.stringify({ obs: ov['Observation Time'], fc: ov['Forecast Time'], kp, kpTime, flare, w: W, h: H, b64: btoa(bin) }) };
 }
 
 // confirmed exoplanets -> the app's catalogue format, grouped by host star
