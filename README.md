@@ -101,6 +101,10 @@ Selecting the ISS (its label, or "ISS" in search) flies the camera to the statio
 
 The scheduled satellite refresh also stores the ISS's own orbital elements (CelesTrak, NORAD 25544) in KV (`block:iss`), written into `<script id="iss">` on the page; the page ships with a snapshot as a fallback. The page propagates them with SGP4's secular J2 terms (checked against wheretheiss.at: within ~2–11 km over 24 h of the element epoch). Earth's rotation follows Greenwich sidereal time whenever the clock runs slowly enough to follow it, and Earth's axis now leans the right way, so with the clock on today at normal speed the station is over the right spot, day and night fall where they do now, and the seasons are right. The ISS card shows where it is right now.
 
+## Today's clouds
+
+Every scheduled run checks for a new day of NASA GIBS imagery (VIIRS NOAA-20 true colour, global day composite; NOAA-21 or MODIS Terra if that day is missing) and stores yesterday's image in KV (`img:earth`, ~0.5 MB, fetched once per day). `GET /api/earth-today.jpg` serves it. When Earth's textures load, the page reads the clouds from it (bright, colourless pixels) and uses them for the cloud layer and cloud shadows instead of the static cloud map; polar night and other gaps keep the static clouds, and toward the poles the static map is trusted more because snow and ice also look white. The Earth card names the date.
+
 ## Routes
 
 | Path | Behavior |
@@ -110,6 +114,7 @@ The scheduled satellite refresh also stores the ISS's own orbital elements (Cele
 | `/api/refresh` | refresh; requires `REFRESH_KEY` |
 | `/api/verify` | POST a Turnstile token; sets the human-check cookie |
 | `/api/human` | JSON `{ "human": true/false }` for the current visitor |
+| `/api/earth-today.jpg` | yesterday's NASA GIBS image of the whole Earth (for today's clouds) |
 | everything else | static file from `public/` |
 
 `wrangler.toml` lists custom domains `cosmossian.com` and `www.cosmossian.com`. Publishing with those routes attaches the Worker to those hostnames. This repository does not change DNS by itself.

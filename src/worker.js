@@ -50,7 +50,7 @@ export default {
   async scheduled(event, env, ctx) {
     // every run refreshes satellites; exoplanets once a day; small bodies once a week
     const h = new Date(event.scheduledTime).getUTCHours(), d = new Date(event.scheduledTime).getUTCDay();
-    const jobs = ['sats'];
+    const jobs = ['sats', 'earth']; // earth: fetches only when a new day of imagery is out
     if (h < 3) jobs.push('exo');
     if (h < 3 && d === 1) jobs.push('sb');
     ctx.waitUntil(refreshAll(env, jobs));
@@ -67,6 +67,7 @@ async function route(request, env, ctx) {
     const ip = request.headers.get('cf-connecting-ip') || 'unknown';
     if (env.API_LIMIT && !(await env.API_LIMIT.limit({ key: 'api:' + ip })).success) return text('too many requests', 429, { 'Retry-After': '60' });
     if (p === '/api/health') return m === 'GET' || m === 'HEAD' ? health(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
+    if (p === '/api/earth-today.jpg') return m === 'GET' || m === 'HEAD' ? earthToday(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
     if (p === '/api/human') return m === 'GET' ? json({ human: await isHuman(request, env) }) : text('method not allowed', 405, { Allow: 'GET' });
     if (p === '/api/verify') return m === 'POST' ? verifyHuman(request, env, ip) : text('method not allowed', 405, { Allow: 'POST' });
     if (p === '/api/refresh') {
@@ -84,6 +85,13 @@ async function route(request, env, ctx) {
   if (m !== 'GET' && m !== 'HEAD') return text('method not allowed', 405, { Allow: 'GET, HEAD' });
   if (p === '/' || p === '/index.html') return page(request, env);
   return env.ASSETS.fetch(request);
+}
+
+async function earthToday(env) {
+  const r = env.LIVE ? await env.LIVE.getWithMetadata('img:earth', 'arrayBuffer') : null;
+  if (!r || !r.value) return text('not available yet', 404);
+  const md = r.metadata || {};
+  return new Response(r.value, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600', 'X-Earth-Date': md.date || '', 'X-Earth-Layer': md.layer || '' } });
 }
 
 /* ---------- human check (Cloudflare Turnstile on the title screen) ----------
@@ -162,16 +170,17 @@ async function page(request, env) {
 
 /* ---------- refresh jobs ---------- */
 async function refreshAll(env, only) {
-  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB };
+  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth };
   const meta = JSON.parse((await env.LIVE.get('meta')) || '{}');
   const report = {};
   for (const k of Object.keys(jobs)) {
     if (only && !only.includes(k)) continue;
     try {
-      const r = await jobs[k](env);
-      await env.LIVE.put('block:' + r.block, r.text);
-      meta[k] = { n: r.n, at: new Date().toISOString(), src: r.src };
-      report[k] = { ok: true, n: r.n, bytes: r.text.length };
+      const r = await jobs[k](env, meta);
+      if (r.skip) { report[k] = { ok: true, skipped: r.skip }; continue; }
+      if (r.block) await env.LIVE.put('block:' + r.block, r.text);
+      meta[k] = Object.assign({ n: r.n, at: new Date().toISOString(), src: r.src }, r.date ? { date: r.date } : {});
+      report[k] = { ok: true, n: r.n, bytes: r.bytes || r.text.length };
     } catch (e) {
       report[k] = { ok: false, error: String(e && e.message || e) };
       meta[k + '_error'] = { at: new Date().toISOString(), error: String(e && e.message || e) };
@@ -224,6 +233,25 @@ async function refreshSats(env) {
     await env.LIVE.put('block:iss', JSON.stringify(Object.assign(Object.fromEntries(keep.map(k => [k, iss[k]])), { src: 'CelesTrak' })));
   }
   return { block: 'debris', n, src: 'CelesTrak', text: JSON.stringify({ t0, n, counts, b64: btoa(bin) }) };
+}
+
+// yesterday's view of the whole Earth from NASA GIBS (VIIRS true colour, one global day composite), kept in KV as a JPEG.
+// The page turns it into today's clouds. Fetched once per new day; falls back to other satellites if one has no data.
+const EARTH_LAYERS = ['VIIRS_NOAA20_CorrectedReflectance_TrueColor', 'VIIRS_NOAA21_CorrectedReflectance_TrueColor', 'MODIS_Terra_CorrectedReflectance_TrueColor'];
+async function refreshEarth(env, meta) {
+  const date = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (meta && meta.earth && meta.earth.date === date) return { skip: 'already have ' + date };
+  for (const layer of EARTH_LAYERS) {
+    const u = 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=' + layer +
+      '&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=2048&HEIGHT=1024&FORMAT=image/jpeg&TIME=' + date;
+    const r = await fetch(u, { headers: { 'User-Agent': UA } });
+    if (!r.ok || !(r.headers.get('content-type') || '').includes('image/jpeg')) continue;
+    const buf = await r.arrayBuffer();
+    if (buf.byteLength < 100000) continue; // an all-black image (no data for that day) is only a few KB
+    await env.LIVE.put('img:earth', buf, { metadata: { date, layer } });
+    return { n: 1, src: 'NASA GIBS ' + layer.split('_').slice(0, 2).join(' '), date, bytes: buf.byteLength };
+  }
+  throw new Error('no GIBS imagery for ' + date);
 }
 
 // confirmed exoplanets -> the app's catalogue format, grouped by host star
