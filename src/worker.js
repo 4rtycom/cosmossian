@@ -52,7 +52,7 @@ export default {
     if (event.cron === '*/30 * * * *') { ctx.waitUntil(refreshAll(env, ['space'])); return; }
     // every run refreshes satellites; exoplanets once a day; small bodies once a week
     const h = new Date(event.scheduledTime).getUTCHours(), d = new Date(event.scheduledTime).getUTCDay();
-    const jobs = ['sats', 'earth']; // earth: fetches only when a new day of imagery is out
+    const jobs = ['sats', 'iss', 'earth']; // earth: fetches only when a new day of imagery is out
     if (h < 3) jobs.push('exo');
     if (h < 3 && d === 1) jobs.push('sb');
     ctx.waitUntil(refreshAll(env, jobs));
@@ -173,7 +173,7 @@ async function page(request, env) {
 
 /* ---------- refresh jobs ---------- */
 async function refreshAll(env, only) {
-  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth, space: refreshSpace };
+  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth, space: refreshSpace, iss: refreshISS };
   const meta = JSON.parse((await env.LIVE.get('meta')) || '{}');
   const report = {};
   for (const k of Object.keys(jobs)) {
@@ -285,6 +285,23 @@ async function refreshSpace() {
   } catch (e) { /* optional */ }
   let bin = ''; for (let i = 0; i < g.length; i += 0x8000) bin += String.fromCharCode.apply(null, g.subarray(i, i + 0x8000));
   return { block: 'space', n: 1, src: 'NOAA SWPC', text: JSON.stringify({ obs: ov['Observation Time'], fc: ov['Forecast Time'], kp, kpTime, flare, w: W, h: H, b64: btoa(bin) }) };
+}
+
+// the ISS's own orbital elements, on their own so the 3D station stays current even when the big satellite feed fails:
+// CelesTrak first, then the TLE that wheretheiss.at republishes
+const ISS_KEYS = ['OBJECT_NAME', 'NORAD_CAT_ID', 'EPOCH', 'MEAN_MOTION', 'ECCENTRICITY', 'INCLINATION', 'RA_OF_ASC_NODE', 'ARG_OF_PERICENTER', 'MEAN_ANOMALY', 'MEAN_MOTION_DOT'];
+function tleToElements(l1, l2) {
+  const yy = +l1.slice(18, 20), doy = +l1.slice(20, 32), year = yy < 57 ? 2000 + yy : 1900 + yy;
+  const epoch = new Date(Date.UTC(year, 0, 1) + (doy - 1) * 86400000).toISOString().replace('Z', '');
+  return { OBJECT_NAME: 'ISS (ZARYA)', NORAD_CAT_ID: +l1.slice(2, 7), EPOCH: epoch, MEAN_MOTION: +l2.slice(52, 63), ECCENTRICITY: +('0.' + l2.slice(26, 33).trim()),
+    INCLINATION: +l2.slice(8, 16), RA_OF_ASC_NODE: +l2.slice(17, 25), ARG_OF_PERICENTER: +l2.slice(34, 42), MEAN_ANOMALY: +l2.slice(43, 51), MEAN_MOTION_DOT: +l1.slice(33, 43) };
+}
+async function refreshISS(env) {
+  let el = null, src = '';
+  try { const a = await getJSON('https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=json'); if (a && a[0] && a[0].MEAN_MOTION) { el = Object.fromEntries(ISS_KEYS.map(k => [k, a[0][k]])); src = 'CelesTrak'; } } catch (e) { /* try the next source */ }
+  if (!el) { const t = await getJSON('https://api.wheretheiss.at/v1/satellites/25544/tles'); if (t && t.line1 && t.line2) { el = tleToElements(t.line1, t.line2); src = 'wheretheiss.at (TLE)'; } }
+  if (!el || !(el.MEAN_MOTION > 14 && el.MEAN_MOTION < 17) || !(el.INCLINATION > 51 && el.INCLINATION < 52.5)) throw new Error('no usable ISS elements');
+  return { block: 'iss', n: 1, src, text: JSON.stringify(Object.assign(el, { src })) };
 }
 
 // confirmed exoplanets -> the app's catalogue format, grouped by host star

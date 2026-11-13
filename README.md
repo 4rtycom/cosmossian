@@ -99,7 +99,7 @@ Selecting the ISS (its label, or "ISS" in search) flies the camera to the statio
 
 ## Live ISS position
 
-The scheduled satellite refresh also stores the ISS's own orbital elements (CelesTrak, NORAD 25544) in KV (`block:iss`), written into `<script id="iss">` on the page; the page ships with a snapshot as a fallback. The page propagates them with SGP4's secular J2 terms (checked against wheretheiss.at: within ~2–11 km over 24 h of the element epoch). Earth's rotation follows Greenwich sidereal time whenever the clock runs slowly enough to follow it, and Earth's axis now leans the right way, so with the clock on today at normal speed the station is over the right spot, day and night fall where they do now, and the seasons are right. The ISS card shows where it is right now.
+A separate `iss` job on the 3-hourly run stores the ISS's own orbital elements in KV (`block:iss`): CelesTrak (NORAD 25544) first, then the TLE republished by wheretheiss.at, because CelesTrak currently answers the Worker with 403, written into `<script id="iss">` on the page; the page ships with a snapshot as a fallback. The page propagates them with SGP4's secular J2 terms (checked against wheretheiss.at: within ~2–11 km over 24 h of the element epoch). Earth's rotation follows Greenwich sidereal time whenever the clock runs slowly enough to follow it, and Earth's axis now leans the right way, so with the clock on today at normal speed the station is over the right spot, day and night fall where they do now, and the seasons are right. The ISS card shows where it is right now.
 
 ## Today's clouds
 
