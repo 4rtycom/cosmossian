@@ -2434,16 +2434,20 @@ const CRAFT=(()=>{const D=jsonBlock('craft');const list=[];if(!D||!D.craft)retur
     it.L=addLabel(I[0],o,'moon',()=>tier==='solar'&&active==='sol'&&!CK.on&&it.ok,'','spacecraft');it.L.pick={type:'craft',key:c.k};
     list.push(it);});
   const P=(it,i)=>_s.set(it.c.p[i*3],it.c.p[i*3+1],it.c.p[i*3+2]);
-  // heliocentric AU at a Julian date: Catmull-Rom through the daily points (Parker's fast perihelion passes stay smooth)
-  function at(it,jd,out){const f=(jd-D.t0)/D.step;if(f<-3||f>it.n+2)return false;const i=Math.max(1,Math.min(it.n-3,Math.floor(f))),t=Math.max(-1,Math.min(2,f-i));
-    const a=P(it,i-1).clone(),b=P(it,i).clone(),c2=P(it,i+1).clone(),d=P(it,i+2).clone(),t2=t*t,t3=t2*t;
+  // heliocentric AU at a Julian date: Catmull-Rom through the daily points (Parker's fast perihelion passes stay smooth).
+  // End samples are reflected so the curve passes through the first and last days; outside the window it coasts on that chord.
+  function at(it,jd,out){const f=(jd-D.t0)/D.step,n=it.n;if(f<-3||f>n+2||n<2)return false;
+    const g=i=>P(it,i<0?0:i>=n?n-1:i).clone();
+    if(f<=0){const a=g(0),b=g(1);return out.copy(a).addScaledVector(b.sub(a),f),true;}
+    if(f>=n-1){const a=g(n-2),b=g(n-1);return out.copy(b).addScaledVector(b.clone().sub(a),f-(n-1)),true;}
+    const i=Math.floor(f),t=f-i,a=i?g(i-1):g(0).multiplyScalar(2).sub(g(1)),b=g(i),c2=g(i+1),d=i+2<n?g(i+2):g(n-1).multiplyScalar(2).sub(g(n-2)),t2=t*t,t3=t2*t;
     out.set(0,0,0).addScaledVector(a,-0.5*t3+t2-0.5*t).addScaledVector(b,1.5*t3-2.5*t2+1).addScaledVector(c2,-1.5*t3+2*t2+0.5*t).addScaledVector(d,0.5*t3-0.5*t2);return true;}
-  // planets are drawn far larger than true scale, so a craft close to one (Juno at Jupiter, JWST beyond Earth) is drawn just outside
-  // that planet's globe, in its true direction from the planet
+  // planets and the Sun are drawn far larger than true scale, so a craft close to one (Juno at Jupiter, JWST beyond Earth,
+  // Parker inside the Sun's globe) is drawn just outside that globe, in its true direction
   function update(jd){list.forEach(it=>{it.ok=at(it,jd,it.au);it.o.visible=it.ok&&solar.visible;if(!it.ok)return;
     let near=null,best=0.05;planetList.forEach(pl=>{if(!pl.h)return;const d=Math.hypot(it.au.x-pl.h.x,it.au.y-pl.h.y,it.au.z-pl.h.z);if(d<best){best=d;near=pl;}});
     if(near){_p.set(it.au.x-near.h.x,it.au.z-near.h.z,-(it.au.y-near.h.y));if(_p.lengthSq()<1e-18)_p.copy(near.pivot.position);_p.normalize().multiplyScalar(near.R*(near.key==='earth'?5:2.4));it.o.position.copy(near.pivot.position).add(_p);}
-    else distMap(it.au.x,it.au.y,it.au.z,it.o.position);});}
+    else{distMap(it.au.x,it.au.y,it.au.z,it.o.position);const lim=SUN.R*1.2;if(it.o.position.lengthSq()<lim*lim){if(it.o.position.lengthSq()<1e-18)it.o.position.set(1,0,0);it.o.position.multiplyScalar(lim/(it.o.position.length()||1));}}});}
   return {list,update,at,D};})();
 function flyToCraft(k){const it=CRAFT.list.find(x=>x.key===k);if(!it)return;if(CK.on){toast('Leave the cockpit to fly to '+it.name,3000);return;}
   select({type:'craft',key:k});if(!it.ok){toast('No position for '+it.name+' at this date',3000);return;}
@@ -3677,6 +3681,8 @@ function applyTrueScale(){
     moonList.forEach(m=>{const par=m.parent,kp=kTrue(par),inTilt=m.pivot.parent===par.tilt,sc=inTilt?kp:1;
       const a=m.aKm/KMU/sc;m.pivot.position.set(Math.cos(m.angle)*a,0,-Math.sin(m.angle)*a);m.tilt.scale.setScalar(kTrue(m)/sc);if(m.hitBase==null)m.hitBase=m.hit.scale.x;m.hit.scale.setScalar(m.hitBase*kTrue(m)/sc);});
     ISS.s.scale.setScalar(0.109/KMU/kTrue(bodies.earth));
+    // craft sit on the solar group, so the compressed positions from CRAFT.update have to be rewritten in ship kilometres
+    CRAFT.list.forEach(it=>{if(!it.ok)return;it.o.position.copy(rel(new V3(it.au.x*AU_KM,it.au.z*AU_KM,-it.au.y*AU_KM)));});
     if(astPts)astPts.visible=false;sunLight.position.copy(SUN.pivot.position);
   }else if(exoStar){
     exoStar.pivot.position.copy(rel(new V3()));setK(exoStar,kTrue(exoStar));
