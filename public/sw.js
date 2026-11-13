@@ -14,7 +14,7 @@ self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
-const STATIC = /^\/(lib|tex|models|data|deck)\/|^\/(logo|og-image|icon-[\w-]+|apple-touch-icon)\.png$|^\/favicon\.ico$/;
+const STATIC = /^\/(lib|tex|models|data|deck|screens)\/|^\/(logo|og-image|icon-[\w-]+|apple-touch-icon)\.png$|^\/favicon\.ico$/;
 
 self.addEventListener('fetch', e => {
   const r = e.request;
