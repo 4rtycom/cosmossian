@@ -15,7 +15,7 @@ const CANONICAL = 'cosmossian.com';
 // security headers on every response the Worker sends (files served straight from ./public get the same set from public/_headers)
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://challenges.cloudflare.com",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://static.cloudflareinsights.com https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob:",
@@ -70,6 +70,7 @@ async function route(request, env, ctx) {
     if (env.API_LIMIT && !(await env.API_LIMIT.limit({ key: 'api:' + ip })).success) return text('too many requests', 429, { 'Retry-After': '60' });
     if (p === '/api/health') return m === 'GET' || m === 'HEAD' ? health(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
     if (p === '/api/gaia.bin') return m === 'GET' || m === 'HEAD' ? gaiaBin(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
+    if (p === '/api/debris.json') return m === 'GET' || m === 'HEAD' ? debrisJSON(request, env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
     if (p === '/api/earth-today.jpg') return m === 'GET' || m === 'HEAD' ? earthToday(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
     if (p === '/api/human') return m === 'GET' ? json({ human: await isHuman(request, env) }) : text('method not allowed', 405, { Allow: 'GET' });
     if (p === '/api/verify') return m === 'POST' ? verifyHuman(request, env, ip) : text('method not allowed', 405, { Allow: 'POST' });
@@ -95,6 +96,14 @@ async function earthToday(env) {
   if (!r || !r.value) return text('not available yet', 404);
   const md = r.metadata || {};
   return new Response(r.value, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600', 'X-Earth-Date': md.date || '', 'X-Earth-Layer': md.layer || '' } });
+}
+
+// satellites and debris: loaded by the page after the title screen (kept out of the page itself so the first visit is light).
+// The latest CelesTrak block from KV when there is one, otherwise the copy shipped with the site.
+async function debrisJSON(request, env) {
+  const v = env.LIVE ? await env.LIVE.get('block:debris') : null;
+  if (v) return new Response(v, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=3600' } });
+  return env.ASSETS.fetch(new Request(new URL('/data/debris.json', request.url), request));
 }
 
 async function gaiaBin(env) {
@@ -160,13 +169,12 @@ async function page(request, env) {
   const res = await env.ASSETS.fetch(new Request(new URL('/', request.url), request));
   if (!res.ok || !(res.headers.get('content-type') || '').includes('text/html')) return res;
   if (!env.LIVE) return res;
-  const [sats, exo, sb, meta, iss, space, craft] = await Promise.all(['block:debris', 'block:exocat', 'block:smallbodies', 'meta', 'block:iss', 'block:space', 'block:craft'].map(k => env.LIVE.get(k)));
+  const [exo, sb, meta, iss, space, craft] = await Promise.all(['block:exocat', 'block:smallbodies', 'meta', 'block:iss', 'block:space', 'block:craft'].map(k => env.LIVE.get(k)));
   // the stored blocks are JSON from outside feeds. Inside a <script> tag, HTML escaping would corrupt them, and raw "<" could close
   // the tag and inject markup. So <, > and & are written as JSON \u escapes: still the same JSON, but it can never leave the tag.
   const safe = s => s.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
   const put = (id, val) => ({ element(el) { if (val) el.setInnerContent(safe(val), { html: true }); } });
   const out = new HTMLRewriter()
-    .on('script#debris', put('debris', sats))
     .on('script#exocat', put('exocat', exo))
     .on('script#smallbodies', put('smallbodies', sb))
     .on('script#livemeta', put('livemeta', meta))
