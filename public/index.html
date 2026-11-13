@@ -488,7 +488,7 @@ body.cockpit .rail{display:none}
     <a id="introTv" class="tvbtn" href="#" role="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="8.5" rx="1.2"/><path d="M5.5 14h5M8 11.5V14"/></svg>Watch on TV</a>
     <div id="tvPanel" class="tvpanel" role="dialog" aria-label="Watch on TV" hidden>
       <p class="tvh">Watch on your TV</p>
-      <p class="tvt">A hands-free tour: the planets, the Sun, a nebula, a black hole and the Milky Way, with something to learn at every stop. On the TV: arrows skip, OK pauses, Back leaves.</p>
+      <p class="tvt">An endless hands-free tour of planets, moons, nebulae, black holes, galaxies and nearby star systems, with something to learn at every stop. On the TV: arrows skip, OK pauses, Back leaves.</p>
       <button type="button" id="tvCast" class="tvgo" hidden><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="8.5" rx="1.2"/><path d="M5.5 14h5M8 11.5V14"/></svg>Cast to TV</button>
       <button type="button" id="tvHere" class="tvgo alt">Start TV mode on this screen</button>
       <p class="tvt small">Then share this screen: in Chrome use <b>⋮ › Cast</b>; on an iPhone or Mac use <b>Screen Mirroring</b> (AirPlay). On a smart TV, open <b>cosmossian.com/?tv=1</b> in its browser.</p>
@@ -4077,20 +4077,40 @@ const TV_STOPS=[
   'The Sun takes about 230 million years to travel once around it.',
   'At its heart lies Sagittarius A*, a black hole of 4.3 million Suns.']}];
 const TV_FACT=7.5; // seconds per fact
-function tvShow(){const st=TV_STOPS[TV.i];if(!TV.cap){TV.cap=document.createElement('div');TV.cap.id='tvCap';TV.cap.innerHTML='<b></b><span></span>';document.body.appendChild(TV.cap);}
+/* After the curated stops the tour never ends: it draws, in shuffled order, from everything the site can show (every planet and
+   moon, the black holes, the nebulae you can fly into, the galaxies, nearby star systems with planets), with facts taken from the
+   site's own descriptions and numbers. A stop is never repeated until the whole pool has been seen. */
+const sents=t=>String(t||'').replace(/ Click[^.]*\.|Drag[^.]*\.|scroll[^.]*\./gi,'').split(/\.\s+/).map(x=>x.trim().replace(/\.?$/,'.')).filter(x=>x.length>12);
+const big=n=>n>=1e9?fmt(n/1e9,n>=1e10?0:1)+' billion':n>=1e6?fmt(n/1e6,n>=1e7?0:1)+' million':fmt(n);
+function tvPool(){const P=[],seen=new Set(TV_STOPS.map(x=>x.name));const add=(name,facts,go)=>{facts=facts.filter(Boolean).slice(0,4);if(facts.length>=2&&!seen.has(name)){seen.add(name);P.push({name,facts,go});}};
+  try{planetList.concat(moonList).forEach(b=>{if(b.sys!=='sol')return;const f=sents(b.desc).slice(0,2);
+    f.push('Its radius is '+fmt(b.Rkm)+' km'+(b.Rkm>7000||b.Rkm<4000?', '+fmt(b.Rkm/6371,2)+' times Earth\u2019s':'')+'.');
+    if(b.kind==='planet'){f.push('A year here lasts '+(b.P<700?fmt(b.P)+' Earth days':fmt(b.P/365.25,1)+' Earth years')+'.');if(b.rotH)f.push('One turn on its axis takes '+(Math.abs(b.rotH)<48?fmt(Math.abs(b.rotH),1)+' hours':fmt(Math.abs(b.rotH)/24,0)+' Earth days')+(b.rotH<0?', spinning backwards':'')+'.');}
+    else if(b.parent&&b.P)f.push('It circles '+b.parent.name+' every '+fmt(Math.abs(b.P),1)+' days'+(b.P<0?', backwards':'')+'.');
+    add(b.name,f,()=>goFocus('body:'+b.key));});}catch(e){}
+  try{Object.keys(BHS).forEach(k=>{const B=BHS[k],z=bhSize(B.M);add(B.name,[...sents(B.note).slice(0,2),'It has '+big(B.M)+' times the mass of the Sun.','Its event horizon is '+sizeText(2*z.rs)+' across: anything that falls inside can never come back out.'],()=>{if(!fading)fadeTo(()=>enterBH(k));});});}catch(e){}
+  try{if(SKY.ready)SKY.dso.forEach((o,i)=>{if(!isNebType(o[2])||o[2]==='DN'||o[5]==='M 42')return;const nm=MESSIER[o[5]]||o[4]||(o[5]&&o[5].replace(/^M /,'Messier '));if(!nm||!(o[5]&&o[5][0]==='M'||MESSIER[o[5]]))return;
+    const what={Neb:'A glowing cloud of gas and dust, the kind of place where new stars are born.',PN:'A dying star has puffed off its outer layers, and its hot core makes them glow. The Sun will do this one day.',SNR:'The expanding wreck of a star that exploded as a supernova.','OC+Neb':'A young star cluster still wrapped in the gas it formed from.'}[o[2]];
+    add(nm,[what,(DSO_T[o[2]]||'Nebula')+(o[8]&&SKY.conName[o[8]]?' in the constellation '+SKY.conName[o[8]]:'')+'.','In catalogues it is '+o[5].replace(' ','\u00a0')+(o[6]&&o[6]!==o[5]?' (also '+o[6]+')':'')+'.','What you see is a model built from its type and size, not a photograph.'],()=>goFocus('neb:dso:'+i));});}catch(e){}
+  try{GALAXIES.forEach(G=>{if(G[0]==='mw')return;add(G[1],[...sents(G[9]).slice(0,2),G[2].split(' · ').pop().replace(/^./,c=>c.toUpperCase())+' galaxy, '+(G[6]<1?fmt(G[6]*1000)+' thousand':fmt(G[6],G[6]<10?1:0)+' million')+' light-years away.','About '+fmt(G[7])+' thousand light-years across, with '+G[8]+' stars.'],()=>goFocus('ugal:'+G[0]));});}catch(e){}
+  try{STARS.forEach(S=>{if(S[0]==='Sun'||!/confirmed/.test(S[6]))return;add(S[0]+' system',[...sents(S[8]).slice(0,2),'A '+S[4]+' star, '+fmt(S[3],1)+' light-years away: its light set out '+fmt(S[3],0)+' years ago.','Planets: '+S[6]+'.'],()=>{if(!fading)fadeTo(()=>enterSystemOf(S[0]));});});}catch(e){}
+  for(let i=P.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[P[i],P[j]]=[P[j],P[i]];}return P;}
+function tvShow(){const st=tvStop_();if(!TV.cap){TV.cap=document.createElement('div');TV.cap.id='tvCap';TV.cap.innerHTML='<b></b><span></span>';document.body.appendChild(TV.cap);}
   const b=TV.cap.firstChild,sp=TV.cap.lastChild;b.textContent=st.name;sp.classList.add('out');
   setTimeout(()=>{sp.textContent=st.facts[TV.f%st.facts.length];sp.classList.remove('out');},TV.f?450:0);TV.cap.classList.add('on');}
-function tvNext(d){if(!TV.on)return;TV.i=(TV.i+d+TV_STOPS.length)%TV_STOPS.length;TV.t=0;TV.f=0;TV.fT=0;const st=TV_STOPS[TV.i];
-  if(CK.on)$('#bCockpit').click();try{st.go();}catch(e){console.warn('TV stop failed',st.name,e);}tvShow();}
+function tvStop_(){return TV.list[TV.i];}
+function tvNext(d){if(!TV.on)return;
+  if(d<0){if(TV.i>0)TV.i--;}else{TV.i++;while(TV.i>=TV.list.length){let p=tvPool();if(!p.length)p=TV_STOPS.slice();if(p[0]&&TV.list.length&&p[0].name===TV.list[TV.list.length-1].name)p.push(p.shift());TV.list.push(...p);}}
+  TV.t=0;TV.f=0;TV.fT=0;const st=tvStop_();if(CK.on)$('#bCockpit').click();try{st.go();}catch(e){console.warn('TV stop failed',st.name,e);}tvShow();}
 // the tour shows the sky clean: every layer and the orbit lines off, without touching the visitor's saved choices
 function tvStart(){if(TV.on)return;TV.on=true;TV.paused=false;TV.saved={lf:Object.assign({},LF),orbits:orbitsOn};
-  Object.keys(LF).forEach(k=>LF[k]=false);orbitsOn=false;document.body.classList.add('nohud','tv');TV.i=-1;tvNext(1);}
+  Object.keys(LF).forEach(k=>LF[k]=false);orbitsOn=false;document.body.classList.add('nohud','tv');TV.list=TV_STOPS.slice();TV.i=-1;tvNext(1);}
 function tvStop(){if(!TV.on)return;TV.on=false;if(TV.saved){Object.assign(LF,TV.saved.lf);orbitsOn=TV.saved.orbits;TV.saved=null;}
   document.body.classList.remove('nohud','tv','hudpeek');if(TV.cap)TV.cap.classList.remove('on');
   if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});toast('TV mode ended',2000);}
 function tvTick(dt){const now=performance.now()/1000,rdt=Math.min(1,now-(TV.last||now));TV.last=now; // facts run on real time, even on a slow TV
   if(!TV.on||TV.paused||fading)return;if(!C.flight)C.gTh+=dt*0.05; // a slow circle around each stop
-  const st=TV_STOPS[TV.i];TV.t+=rdt;TV.fT+=rdt;
+  const st=tvStop_();TV.t+=rdt;TV.fT+=rdt;
   if(TV.fT>TV_FACT){TV.fT=0;TV.f++;if(TV.f>=st.facts.length){tvNext(1);return;}tvShow();}}
 addEventListener('cosmossian:entered',()=>{if(window.__tv)setTimeout(tvStart,600);});
 if(window.__tv&&!window.__intro)setTimeout(tvStart,600); // the title screen may have finished before this script ran
