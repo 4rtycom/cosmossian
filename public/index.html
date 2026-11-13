@@ -2515,7 +2515,7 @@ const CRAFT=(()=>{const D=jsonBlock('craft');const list=[];if(!D||!D.craft)retur
     out.set(0,0,0).addScaledVector(a,-0.5*t3+t2-0.5*t).addScaledVector(b,1.5*t3-2.5*t2+1).addScaledVector(c2,-1.5*t3+2*t2+0.5*t).addScaledVector(d,0.5*t3-0.5*t2);return true;}
   // planets are drawn far larger than true scale, so a craft close to one (Juno at Jupiter, JWST beyond Earth) is drawn just outside
   // that planet's globe, in its true direction from the planet
-  function update(jd){list.forEach(it=>{it.ok=at(it,jd,it.au);it.o.visible=it.ok&&solar.visible&&!TV.on;if(!it.ok)return;
+  function update(jd){list.forEach(it=>{it.ok=at(it,jd,it.au);it.o.visible=it.ok&&solar.visible&&!TV.on&&LF.spacecraft!==false; // the glowing markers belong to the Spacecraft layerif(!it.ok)return;
     let near=null,best=0.05;planetList.forEach(pl=>{if(!pl.h)return;const d=Math.hypot(it.au.x-pl.h.x,it.au.y-pl.h.y,it.au.z-pl.h.z);if(d<best){best=d;near=pl;}});
     if(near){_p.set(it.au.x-near.h.x,it.au.z-near.h.z,-(it.au.y-near.h.y));if(_p.lengthSq()<1e-18)_p.copy(near.pivot.position);_p.normalize().multiplyScalar(near.R*(near.key==='earth'?5:2.4));it.o.position.copy(near.pivot.position).add(_p);}
     else distMap(it.au.x,it.au.y,it.au.z,it.o.position);});}
