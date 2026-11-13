@@ -52,7 +52,7 @@ export default {
     if (event.cron === '*/30 * * * *') { ctx.waitUntil(refreshAll(env, ['space'])); return; }
     // every run refreshes satellites; exoplanets once a day; small bodies once a week
     const h = new Date(event.scheduledTime).getUTCHours(), d = new Date(event.scheduledTime).getUTCDay();
-    const jobs = ['sats', 'iss', 'earth', 'craft']; // earth: fetches only when a new day of imagery is out
+    const jobs = ['sats', 'iss', 'earth', 'craft', 'gaia']; // gaia: builds its file once, then skips // earth: fetches only when a new day of imagery is out
     if (h < 3) jobs.push('exo');
     if (h < 3 && d === 1) jobs.push('sb');
     ctx.waitUntil(refreshAll(env, jobs));
@@ -69,6 +69,7 @@ async function route(request, env, ctx) {
     const ip = request.headers.get('cf-connecting-ip') || 'unknown';
     if (env.API_LIMIT && !(await env.API_LIMIT.limit({ key: 'api:' + ip })).success) return text('too many requests', 429, { 'Retry-After': '60' });
     if (p === '/api/health') return m === 'GET' || m === 'HEAD' ? health(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
+    if (p === '/api/gaia.bin') return m === 'GET' || m === 'HEAD' ? gaiaBin(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
     if (p === '/api/earth-today.jpg') return m === 'GET' || m === 'HEAD' ? earthToday(env) : text('method not allowed', 405, { Allow: 'GET, HEAD' });
     if (p === '/api/human') return m === 'GET' ? json({ human: await isHuman(request, env) }) : text('method not allowed', 405, { Allow: 'GET' });
     if (p === '/api/verify') return m === 'POST' ? verifyHuman(request, env, ip) : text('method not allowed', 405, { Allow: 'POST' });
@@ -94,6 +95,12 @@ async function earthToday(env) {
   if (!r || !r.value) return text('not available yet', 404);
   const md = r.metadata || {};
   return new Response(r.value, { headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=3600', 'X-Earth-Date': md.date || '', 'X-Earth-Layer': md.layer || '' } });
+}
+
+async function gaiaBin(env) {
+  const v = env.LIVE ? await env.LIVE.get('bin:gaia', 'arrayBuffer') : null;
+  if (!v) return text('not available yet', 404);
+  return new Response(v, { headers: { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'public, max-age=604800' } });
 }
 
 /* ---------- human check (Cloudflare Turnstile on the title screen) ----------
@@ -174,7 +181,7 @@ async function page(request, env) {
 
 /* ---------- refresh jobs ---------- */
 async function refreshAll(env, only) {
-  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth, space: refreshSpace, iss: refreshISS, craft: refreshCraft };
+  const jobs = { sats: refreshSats, exo: refreshExo, sb: refreshSB, earth: refreshEarth, space: refreshSpace, iss: refreshISS, craft: refreshCraft, gaia: refreshGaia };
   const meta = JSON.parse((await env.LIVE.get('meta')) || '{}');
   const report = {};
   for (const k of Object.keys(jobs)) {
@@ -330,6 +337,37 @@ async function refreshCraft(env, meta) {
   }
   if (out.length < 5) throw new Error('JPL Horizons answered for only ' + out.length + ' spacecraft');
   return { block: 'craft', n: out.length, src: 'JPL Horizons', date: day, text: JSON.stringify({ t0, step: 1, date: day, craft: out }) };
+}
+
+// ESA Gaia DR3: the stars from G = 7.0 to 9.0 (fainter than the HYG catalogue the sky already has), fetched once in 0.1-mag slices
+// from the Gaia archive and packed brightest first, 8 bytes a star:
+// ra u16 (0..360), dec u16 (-90..90), G u8 (7..9), BP-RP i8 (x40), parallax u16 (mas x20, 0 = none). Header: 'GDR3', count u32, G range f32 x2.
+const GAIA_G = [7.0, 9.0];
+async function refreshGaia(env) {
+  if (await env.LIVE.get('bin:gaia', 'arrayBuffer')) return { skip: 'already built' };
+  const rows = [];
+  for (let g = Math.round(GAIA_G[0] * 10); g < Math.round(GAIA_G[1] * 10); g++) {
+    const q = `SELECT ra,dec,phot_g_mean_mag,bp_rp,parallax FROM gaiadr3.gaia_source WHERE phot_g_mean_mag >= ${(g / 10).toFixed(1)} AND phot_g_mean_mag < ${((g + 1) / 10).toFixed(1)}`;
+    const r = await fetch('https://gea.esac.esa.int/tap-server/tap/sync', { method: 'POST', headers: { 'User-Agent': UA },
+      body: new URLSearchParams({ REQUEST: 'doQuery', LANG: 'ADQL', FORMAT: 'csv', QUERY: q }) });
+    if (!r.ok) throw new Error('Gaia archive answered ' + r.status + ' for G ' + (g / 10).toFixed(1));
+    const lines = (await r.text()).split('\n');
+    if (!/^ra,dec,phot_g_mean_mag/.test(lines[0])) throw new Error('unexpected Gaia answer for G ' + (g / 10).toFixed(1));
+    for (let i = 1; i < lines.length; i++) { if (!lines[i]) continue; const c = lines[i].split(','); rows.push([+c[0], +c[1], +c[2], c[3] === '' ? NaN : +c[3], c[4] === '' ? NaN : +c[4]]); }
+  }
+  if (rows.length < 50000) throw new Error('too few Gaia stars: ' + rows.length);
+  rows.sort((a, b) => a[2] - b[2]);
+  const n = rows.length, buf = new ArrayBuffer(16 + n * 8), dv = new DataView(buf);
+  [71, 68, 82, 51].forEach((b, i) => dv.setUint8(i, b)); dv.setUint32(4, n, true); dv.setFloat32(8, GAIA_G[0], true); dv.setFloat32(12, GAIA_G[1], true);
+  const cl = (x, a, b) => Math.max(a, Math.min(b, x));
+  rows.forEach((s, i) => { const o = 16 + i * 8;
+    dv.setUint16(o, cl(Math.round(((s[0] % 360) + 360) % 360 / 360 * 65535), 0, 65535), true);
+    dv.setUint16(o + 2, cl(Math.round((s[1] + 90) / 180 * 65535), 0, 65535), true);
+    dv.setUint8(o + 4, cl(Math.round((s[2] - GAIA_G[0]) / (GAIA_G[1] - GAIA_G[0]) * 255), 0, 255));
+    dv.setInt8(o + 5, isNaN(s[3]) ? -128 : cl(Math.round(s[3] * 40), -127, 127));
+    dv.setUint16(o + 6, isNaN(s[4]) || s[4] <= 0 ? 0 : cl(Math.round(s[4] * 20), 1, 65535), true); });
+  await env.LIVE.put('bin:gaia', buf, { metadata: { n, at: new Date().toISOString() } });
+  return { n, src: 'ESA Gaia DR3', bytes: buf.byteLength };
 }
 
 // confirmed exoplanets -> the app's catalogue format, grouped by host star

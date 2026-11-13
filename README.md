@@ -113,6 +113,10 @@ A second cron trigger (`*/30 * * * *`) runs only the `space` job: NOAA SWPC's OV
 
 A daily `craft` job asks JPL Horizons for the heliocentric ecliptic position of 13 missions (Voyager 1 and 2, New Horizons, Parker Solar Probe, JWST, Juno, Europa Clipper, Psyche, Lucy, JUICE, BepiColombo, Solar Orbiter, Hera), one point per day from 10 days back to 60 days ahead (`block:craft`, ~30 KB, written into `<script id="craft">`). The page interpolates them to the simulation date, labels them, and gives each a card (distance from the Sun and Earth, light-time, speed, launch). Craft within 0.05 AU of a planet are drawn just outside that planet's globe in their true direction, because planets are drawn much larger than true scale. Mission texts are in `CRAFT_INFO` in `public/index.html`.
 
+## Gaia stars
+
+A one-time `gaia` job (on the 3-hourly run; it skips once the file exists) queries the ESA Gaia archive for every Gaia DR3 star from G = 7.0 to 9.0, fainter than the HYG stars the sky already has, in 0.1-mag slices. It packs them brightest first at 8 bytes a star (position, G, BP−RP colour, parallax) into KV (`bin:gaia`, ~1.2 MB), and `GET /api/gaia.bin` serves the file. A few seconds after the sky is first shown, the page loads it when idle, converts G and BP−RP to the V magnitude and B−V colour the sky shader uses, and places the stars at their parallax distances, so the sky shifts correctly when you visit another star system. Phones load only the stars to G = 8.3. To rebuild, delete `bin:gaia` in KV. Data: ESA/Gaia/DPAC (CC BY-SA 3.0 IGO).
+
 ## Routes
 
 | Path | Behavior |
@@ -123,6 +127,7 @@ A daily `craft` job asks JPL Horizons for the heliocentric ecliptic position of 
 | `/api/verify` | POST a Turnstile token; sets the human-check cookie |
 | `/api/human` | JSON `{ "human": true/false }` for the current visitor |
 | `/api/earth-today.jpg` | yesterday's NASA GIBS image of the whole Earth (for today's clouds) |
+| `/api/gaia.bin` | packed Gaia DR3 stars, G 7–9 |
 | everything else | static file from `public/` |
 
 `wrangler.toml` lists custom domains `cosmossian.com` and `www.cosmossian.com`. Publishing with those routes attaches the Worker to those hostnames. This repository does not change DNS by itself.
@@ -176,4 +181,6 @@ The Worker reads two secrets: `REFRESH_KEY` and `TURNSTILE_SECRET`. Keep it in `
 
 - CelesTrak (Dr. T.S. Kelso): orbital elements.
 - NASA Exoplanet Archive (Caltech/IPAC).
+- ESA Gaia DR3: This work has made use of data from the European Space Agency (ESA) mission Gaia, processed by the Gaia Data Processing and Analysis Consortium (DPAC).
+- JPL Horizons (spacecraft), NOAA SWPC (aurora, Kp, flares), NASA GIBS (daily Earth imagery), NASA 3D Resources (ISS model).
 - JPL Small-Body Database (NASA/JPL-Caltech).
