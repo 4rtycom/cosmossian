@@ -50,7 +50,7 @@ export default {
   async scheduled(event, env, ctx) {
     // every run refreshes satellites; exoplanets once a day; small bodies once a week
     const h = new Date(event.scheduledTime).getUTCHours(), d = new Date(event.scheduledTime).getUTCDay();
-    const jobs = ['sats', 'earth']; // earth: fetches only when a new day of imagery is out
+    const jobs = ['sats', 'earth']; // earth: yesterday's mosaic, refetched until 06:00 UTC
     if (h < 3) jobs.push('exo');
     if (h < 3 && d === 1) jobs.push('sb');
     ctx.waitUntil(refreshAll(env, jobs));
@@ -236,11 +236,14 @@ async function refreshSats(env) {
 }
 
 // yesterday's view of the whole Earth from NASA GIBS (VIIRS true colour, one global day composite), kept in KV as a JPEG.
-// The page turns it into today's clouds. Fetched once per new day; falls back to other satellites if one has no data.
+// The page turns it into today's clouds. GIBS fills the last orbits of a UTC day a few hours after midnight, so the
+// mosaic is fetched again until 06:00 UTC and then kept. Falls back to other satellites if one has no data.
 const EARTH_LAYERS = ['VIIRS_NOAA20_CorrectedReflectance_TrueColor', 'VIIRS_NOAA21_CorrectedReflectance_TrueColor', 'MODIS_Terra_CorrectedReflectance_TrueColor'];
 async function refreshEarth(env, meta) {
   const date = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-  if (meta && meta.earth && meta.earth.date === date) return { skip: 'already have ' + date };
+  const settled = Date.parse(date + 'T00:00:00Z') + 30 * 3600000; // 06:00 UTC, after the last orbits have landed
+  const have = meta && meta.earth;
+  if (have && have.date === date && Date.parse(have.at) >= settled) return { skip: 'already have ' + date };
   for (const layer of EARTH_LAYERS) {
     const u = 'https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=' + layer +
       '&CRS=EPSG:4326&BBOX=-90,-180,90,180&WIDTH=2048&HEIGHT=1024&FORMAT=image/jpeg&TIME=' + date;
