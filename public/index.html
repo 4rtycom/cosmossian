@@ -610,6 +610,7 @@ body.cockpit .rail{display:none}
   }
   function loop(now){if(done)return;raf=requestAnimationFrame(loop);if(document.hidden)return;try{draw(now);}catch(e){cancelAnimationFrame(raf);cv.style.display='none';}}
   function finish(){if(done)return;if(!human){if(el.classList.contains('go'))el.classList.add('wait');return;} // still checking: hold at full warp
+    if(!window.__explorerReady&&performance.now()-T0<25000){if(!finish.w){finish.w=1;addEventListener('cosmossian:ready',finish,{once:true});}return;} // the universe is still being built underneath: keep warping
     done=true;window.__intro=false;el.classList.remove('wait');el.classList.add('out');dispatchEvent(new Event('cosmossian:entered'));later(cleanup,1200);}
   function cleanup(){cancelAnimationFrame(raf);timers.forEach(clearTimeout);removeEventListener('resize',onResize);removeEventListener('pointermove',onMove);removeEventListener('keydown',onKey,true);el.remove();stars=[];neb=null;}
   function enter(){if(warp||done)return;wantEnter=true;if(needVisitor&&!human){say('Please confirm you are human to enter.');return;}go.disabled=true;el.classList.add('go');if(reduce||cv.style.display==='none'){finish();return;}warp=1;warpT=performance.now();later(finish,2400);}
@@ -808,9 +809,9 @@ body.cockpit .rail{display:none}
 <script src="/lib/three/post/UnrealBloomPass.js"></script>
 
 <script>
-(function(){
+(async function(){
 'use strict';
-if(!window.THREE){document.body.insertAdjacentHTML('beforeend','<div id="err">The 3D engine could not load. Check your connection and reload the page.</div>');return;}
+if(!window.THREE){document.body.insertAdjacentHTML('beforeend','<div id="err">The 3D engine could not load. Check your connection and reload the page.</div>');window.__explorerReady=true;return;}
 const $=s=>document.querySelector(s);
 const V3=THREE.Vector3, DEG=Math.PI/180, TAU=Math.PI*2;
 const AU_KM=149597870.7, GM_SUN=1.32712440018e11;
@@ -818,14 +819,18 @@ const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
 const lerp=(a,b,t)=>a+(b-a)*t;
 const sstep=(e0,e1,x)=>{const t=clamp((x-e0)/(e1-e0),0,1);return t*t*(3-2*t);};
 const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
-const fmt=(n,d=0)=>n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const FMT=[];const fmt=(n,d=0)=>(FMT[d]||(FMT[d]=new Intl.NumberFormat('en-US',{minimumFractionDigits:d,maximumFractionDigits:d}))).format(n); // one formatter per precision: creating one per call is slow
+// The explorer is built while the title screen is up. Between the big build steps it hands control back to the browser for a moment,
+// so the title animation and the human check keep running instead of freezing for seconds (most noticeable in Chrome).
+const YC=new MessageChannel(),YQ=[];YC.port1.onmessage=()=>{const r=YQ.shift();if(r)r();}; // a message, not a timer: timers are slowed to once a second in background tabs
+const yieldUI=()=>new Promise(r=>{if(window.scheduler&&scheduler.yield)scheduler.yield().then(r);else{YQ.push(r);YC.port2.postMessage(0);}});
 
 /* ================= RENDERER ================= */
 const canvas=$('#scene');
 let renderer;
 try{
   renderer=new THREE.WebGLRenderer({canvas,antialias:true,logarithmicDepthBuffer:true,powerPreference:'high-performance'});
-}catch(e){document.body.insertAdjacentHTML('beforeend','<div id="err">WebGL is not available in this browser, so the 3D view cannot start.</div>');return;}
+}catch(e){document.body.insertAdjacentHTML('beforeend','<div id="err">WebGL is not available in this browser, so the 3D view cannot start.</div>');window.__explorerReady=true;return;}
 renderer.setClearColor(0x020308,1);
 // Do not ask the GPU whether each shader compiled right after linking it: that question makes the browser wait for every compile in turn
 // (very slow in Chrome on Windows, which translates each shader for Direct3D). Add ?glcheck to the address to get the error reports back.
@@ -1317,6 +1322,7 @@ function atmoMaterial(color,H,strength){
     uSunObj:{value:new V3(1,0,0)},uCamObj:{value:new V3()},uColor:{value:C3(color)},uShell:{value:shell},uH:{value:H},uStrength:{value:strength}}})),shell];
 }
 
+await yieldUI();
 /* ================= TEXTURES (sprites) ================= */
 function glowTex(stops){const c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');const gr=g.createRadialGradient(128,128,0,128,128,128);stops.forEach(s=>gr.addColorStop(s[0],s[1]));g.fillStyle=gr;g.fillRect(0,0,256,256);const t=new THREE.CanvasTexture(c);return t;}
 // a star seen with the naked eye: a white-hot point with a tight, quickly fading glare (no colour of its own; tinted by temperature)
@@ -1338,6 +1344,7 @@ function markerSprite(kind,scale){
 function iconSprite(kind,px){const sp=markerSprite(kind,1);sp.material.sizeAttenuation=false;sp.scale.set(px,px,1);sp.layers.set(1);return sp;}
 function spriteMat(tex,color,opacity=1){return new THREE.SpriteMaterial({map:tex,color:new THREE.Color(color),transparent:true,opacity,blending:THREE.AdditiveBlending,depthWrite:false});}
 
+await yieldUI();
 /* ================= STARFIELD (all tiers) ================= */
 const starfield=(()=>{
   const N=9000,pos=new Float32Array(N*3),col=new Float32Array(N*3);
@@ -1355,12 +1362,14 @@ const starfield=(()=>{
   p.frustumCulled=false;p.renderOrder=-10;scene.add(p);return p;
 })();
 
+await yieldUI();
 /* ================= LABELS ================= */
 const labelsEl=$('#labels');const labels=[];
 const KIND_CAT={gal:'regions',star:'stars',body:'planets',moon:'moons',ring:'scale',con:'constellations',dso:'deepsky'};
 function catOf(k){return /black hole|quasar/i.test(k)?'bh':/supernova|remnant|pulsar|magnetar|burst|merger|kilonova|wave/i.test(k)?'events':/nebula|molecular cloud/i.test(k)?'nebulae':/globular|open cluster|star cluster/i.test(k)?'clusters':/cluster|supercluster|filament|edge of|colliding/i.test(k)?'structures':/galax/i.test(k)?'galaxies':'regions';}
 function addLabel(text,obj,kind,show,extra,cat){const el=document.createElement('div');el.className='lbl k-'+kind;el.innerHTML=text+(extra||'');el.style.opacity=0;el.style.visibility='hidden';labelsEl.appendChild(el);const L={el,obj,show,on:false,cat:cat||KIND_CAT[kind]||'regions'};el._L=L;labels.push(L);return L;}
 
+await yieldUI();
 /* ================= TIER 3: GALAXY ================= */
 const U_COSMIC={value:0};
 // differential rotation: inner parts turn faster (flat rotation curve, softened so arms survive a session)
@@ -1546,6 +1555,7 @@ vec2 d=gl_PointCoord-0.5;float r2=dot(d,d)*4.;float a=${soft?'exp(-r2*3.2)*(1.-r
 })();
 
 
+await yieldUI();
 /* ================= TIER 4: LOCAL UNIVERSE ================= */
 const universe=new THREE.Group();scene.add(universe);universe.visible=false;
 // key, name, Hubble class, generator, RA h, Dec deg, distance Mly, diameter kly, stars, note
@@ -1667,6 +1677,7 @@ function genCluster(S,seed,n){
   const m=galMat(2.6,false,0.9);GAL.mats.push(m);const pts=new THREE.Points(g,m);pts.frustumCulled=false;
   const grp=new THREE.Group();grp.add(pts);const glow=new THREE.Sprite(spriteMat(TEX_GLOW,'#ffcf9a',.14));glow.scale.set(S*1.3,S*1.3,1);grp.add(glow);return grp;
 }
+await yieldUI();
 CLUSTERS.forEach((c,i)=>{
   const P=posFor(c[3],c[4],c[6]);const o=new THREE.Group();o.position.copy(P);universe.add(o);
   if(c[11])o.add(genCluster(c[11],i*31+7));
@@ -1675,13 +1686,16 @@ CLUSTERS.forEach((c,i)=>{
   UCL[c[0]]={c,o,S:c[11]||10};
   UCL[c[0]].label=addLabel(c[1]+`<span class="mult">${c[2]}</span>`,o,'gal',()=>tier==='universe','',catOf(c[2]));if(c[0]!=='laniakea')UCL[c[0]].label.pick={type:'ucl',key:c[0]};
 });
+await yieldUI();
 // illustrative cosmic web: filaments between random nodes, outside the local volume
 (()=>{const R=rng(99),gs=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*v);};
   const nodes=[];while(nodes.length<300){const v=new V3(R()*2-1,R()*2-1,R()*2-1);if(v.lengthSq()>1)continue;v.multiplyScalar(940);if(v.length()<130)continue;nodes.push(v);}
-  const edges=[];nodes.forEach((a,i)=>{const d=nodes.map((b,j)=>[a.distanceToSquared(b),j]).sort((x,y)=>x[0]-y[0]);for(let k=1;k<=3;k++){const j=d[k][1];if(j>i)edges.push([i,j]);}});
+  const edges=[];nodes.forEach((a,i)=>{const best=[[1/0,-1],[1/0,-1],[1/0,-1]]; // the 3 nearest other nodes, found in one pass
+    nodes.forEach((b,j)=>{if(j===i)return;const d=a.distanceToSquared(b);if(d<best[2][0]){best[2]=[d,j];best.sort((x,y)=>x[0]-y[0]);}});
+    for(let k=0;k<3;k++){const j=best[k][1];if(j>i)edges.push([i,j]);}});
   const P=[],Cc=[],Sz=[],HP=[],HC=[],HS=[];
   edges.forEach(([i,j])=>{const a=nodes[i],b=nodes[j],L=a.distanceTo(b),n=Math.round(L*1.6);
-    for(let k=0;k<n;k++){const t=R(),w=4+L*0.035;P.push(lerp(a.x,b.x,t)+gs()*w,lerp(a.y,b.y,t)+gs()*w,lerp(a.z,b.z,t)+gs()*w);const warm=R()<0.3;Cc.push(...(warm?[.95,.78,.6]:[.55,.62,1]).map(x=>x*.7));Sz.push(0.5+R()*0.6);}
+    for(let k=0;k<n;k++){const t=R(),w=4+L*0.035;P.push(lerp(a.x,b.x,t)+gs()*w,lerp(a.y,b.y,t)+gs()*w,lerp(a.z,b.z,t)+gs()*w);if(R()<0.3)Cc.push(.665,.546,.42);else Cc.push(.385,.434,.7);Sz.push(0.5+R()*0.6);}
     for(let k=0;k<Math.round(L/9);k++){const t=R();HP.push(lerp(a.x,b.x,t)+gs()*8,lerp(a.y,b.y,t)+gs()*8,lerp(a.z,b.z,t)+gs()*8);HC.push(.45,.5,1);HS.push(28+R()*30);}});
   nodes.forEach(a=>{for(let k=0;k<70;k++){P.push(a.x+gs()*7,a.y+gs()*7,a.z+gs()*7);Cc.push(1,.82,.62);Sz.push(0.6+R()*0.6);}HP.push(a.x,a.y,a.z);HC.push(1,.75,.5);HS.push(40);});
   const mk=(p,c,z,m)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.setAttribute('aColor',new THREE.Float32BufferAttribute(c,3));g.setAttribute('aSize',new THREE.Float32BufferAttribute(z,1));
@@ -1738,6 +1752,7 @@ function buildGalaxyX(key){
   gxBuilt=key;
 }
 
+await yieldUI();
 /* ================= TRUE-SCALE BLACK HOLE VIEWER =================
    Full-screen ray tracer in Schwarzschild spacetime (units: Schwarzschild radius Rs = 1).
    Photon paths use d²x/dλ² = −1.5 h² x / r⁵, which reproduces the photon sphere (1.5 Rs) and the shadow (~2.6 Rs).
@@ -1835,6 +1850,7 @@ void main(){
 const bhMat=new THREE.ShaderMaterial({vertexShader:'void main(){gl_Position=vec4(position.xy,0.,1.);}',fragmentShader:BH_FRAG,depthTest:false,depthWrite:false,
   uniforms:{uRes:{value:new THREE.Vector2(1,1)},uCamPos:{value:new V3()},uCamRot:{value:new THREE.Matrix3()},uTanHalf:{value:Math.tan(25*DEG)},uTime:{value:0},uDisk:{value:1},uDiskOut:{value:17},uSteps:{value:300},uEnv:{value:0},uJet:{value:0},uSeed:{value:0}}});
 bhScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),bhMat));
+await yieldUI();
 /* ================= NEBULAE: fly around and through a glowing cloud =================
    A volume model built from each nebula's type: hydrogen glows red, doubly ionised oxygen teal, dust blocks light,
    and the stars inside light the gas. Shapes follow the class (star-forming cloud, planetary shell, supernova
@@ -1976,6 +1992,7 @@ function exitBH(){const f=bhFrom||{tier:'galaxy',galFocus:'mw'};
   fadeTo(()=>{if(f.tier==='universe'){enterUniverse(false);}else if(f.galFocus&&f.galFocus!=='mw'){enterGalaxyX(f.galFocus);}else enterGalaxy(false);
     const s=f.sel;if(s){if(s.type==='mwo')pickMwo(s.key);else if(s.type==='ucl')pickCl(s.key);else if(s.type==='ugal'&&tier==='universe')pickGal(s.key);else if(s.type==='gal'&&s.key==='sgra'){select(s);C.gFixed.set(0,0,0);C.gAlt=420;}}});}
 
+await yieldUI();
 /* ================= TIER 2: NEIGHBORHOOD ================= */
 const hood=new THREE.Group();scene.add(hood);
 // name, RA (h), Dec (deg), distance (ly), spectral, luminosity (L☉), planets, habitable-zone flag, note
@@ -2053,6 +2070,7 @@ const hoodPick=[];const STAR_OBJ={};
 })();
 
 
+await yieldUI();
 /* ---------- Exoplanet catalogue: Open Exoplanet Catalogue snapshot (confirmed planets through 2023) ---------- */
 const EXOCAT=JSON.parse(document.getElementById('exocat').textContent);
 const CAT={};const CATX={};const catList=[];const HZLIST=[];
@@ -2062,7 +2080,7 @@ const catDir=(raDeg,dec)=>{const ra=raDeg*DEG,de=dec*DEG;return new V3(Math.cos(
 (()=>{const cur=STARS.map(x=>({d:catDir(x[1]*15,x[2]),ly:x[3]}));
   EXOCAT.forEach(x=>{
     const dir=catDir(x[1],x[2]);
-    {const ci=x[3]?cur.findIndex(c=>c.d.angleTo(dir)<0.005&&Math.abs(c.ly-x[3])/c.ly<0.3):-1;if(ci>=0){const st=STARS[ci],L0=st[5]||1;CATX[st[0]]={teff:x[5],Rs:x[6],nst:x[8],pl:x[9].map(q=>{const S=L0/(q[1]*q[1]);const hz=(S>=0.36&&S<=1.1&&q[3]<=2.5)?1:(S>=0.25&&S<=1.5&&q[3]<=4)?2:0;return[q[0],q[1],q[2],q[3],q[8].includes('c')?1:0,hz,q[6],q[7],q[8].includes('e')?1:0,q[5]];})};return;}} // a hand-curated star: keep its catalogued planets and star data
+    {const ci=x[3]?cur.findIndex(c=>Math.abs(c.ly-x[3])/c.ly<0.3&&c.d.angleTo(dir)<0.005):-1;if(ci>=0){const st=STARS[ci],L0=st[5]||1;CATX[st[0]]={teff:x[5],Rs:x[6],nst:x[8],pl:x[9].map(q=>{const S=L0/(q[1]*q[1]);const hz=(S>=0.36&&S<=1.1&&q[3]<=2.5)?1:(S>=0.25&&S<=1.5&&q[3]<=4)?2:0;return[q[0],q[1],q[2],q[3],q[8].includes('c')?1:0,hz,q[6],q[7],q[8].includes('e')?1:0,q[5]];})};return;}} // a hand-curated star: keep its catalogued planets and star data
     const letter=(x[4]&&/^[OBAFGKM]/.test(x[4]))?x[4][0]:(teffLetter(x[5])||'G');
     const Rs=x[6]||({O:8,B:4,A:1.8,F:1.3,G:1,K:0.8,M:0.4}[letter]);
     const L=x[7]||(x[5]?Rs*Rs*Math.pow(x[5]/5772,4):1);
@@ -2096,6 +2114,7 @@ function refreshCatLabels(){
 }
 function pickCat(n){const c=CAT[n];select({type:'cat',key:n});if(c.pos){C.gFixed.copy(c.pos);C.gAlt=14;}else toast('Distance unknown: use “Enter system” to visit it');}
 
+await yieldUI();
 /* ---------- the night sky from inside a system: nearby star systems at their real directions ---------- */
 const skyStars=new THREE.Group();scene.add(skyStars);skyStars.visible=false;const skyPick=[],skyLabels=[];let skyFor=null;
 function physLy(name){if(name==='Sun')return new V3();const st=STARS.find(x=>x[0]===name);if(st)return catDir(st[1]*15,st[2]).multiplyScalar(st[3]);const c=CAT[name];return c&&c.ly?c.dir.clone().multiplyScalar(c.ly):null;}
@@ -2112,6 +2131,7 @@ function buildSky(name){if(skyFor===name)return;skyFor=name;
     sp.userData.pick={type:'sky',key:c.n};sp.userData.dly=c.d;sp.userData.base=sp.position.clone();skyStars.userData.f=1;skyStars.add(sp);skyPick.push(sp);
     const L=addLabel(c.n+`<span class="mult">${fmt(c.d,c.d<100?1:0)} ly</span>`,sp,'star',()=>(tier==='solar'||tier==='exo'||tier==='surface')&&skyFor===(active==='sol'?'Sun':active),'','stars');L.pick={type:'sky',key:c.n};skyLabels.push(L);});}
 
+await yieldUI();
 /* ================= TIER 1 + 0: SOLAR SYSTEM ================= */
 const solar=new THREE.Group();scene.add(solar);
 const SPHERE_HI=new THREE.SphereGeometry(1,320,160),SPHERE_MD=new THREE.SphereGeometry(1,160,80),SPHERE_LO=new THREE.SphereGeometry(1,24,12);
@@ -2273,6 +2293,7 @@ REAL.big=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').m
       if(!st&&(focus||px>6))REAL.load(k,false);
       else if(st===2&&REAL.big&&px>450)REAL.load(k,true);}};
 })();
+await yieldUI();
 /* ================= REAL-DATA LAYERS =================
    Small bodies (asteroids, comets, dwarf planets, interstellar visitors), meteor showers along Earth's orbit,
    every tracked object in Earth orbit (satellites, rocket bodies, debris) and every catalogued meteorite landing. */
@@ -2551,6 +2572,7 @@ let astPts=null;
   g.setAttribute('aColor',new THREE.BufferAttribute(cc,3));g.setAttribute('aSize',new THREE.BufferAttribute(zz,1));
   const m=galMat(1.6,false,1.0);GAL.mats.push(m);const pts=new THREE.Points(g,m);pts.frustumCulled=false;solar.add(pts);astPts=pts;})();
 
+await yieldUI();
 /* ================= EPHEMERIS ================= */
 function jdNow(){return Date.now()/86400000+2440587.5;}
 function elements(b,jd){const T=(jd-2451545)/36525;const e=b.el.map((v,i)=>v+b.rt[i]*T);return{a:e[0],e:e[1],I:e[2]*DEG,L:e[3]*DEG,w:e[4]*DEG,O:e[5]*DEG};}
@@ -2565,6 +2587,7 @@ function helio(b,jd){
   const h=keplerXYZ(el,E);h.r=Math.hypot(h.x,h.y,h.z);h.a=el.a;return h;
 }
 
+await yieldUI();
 /* ================= CAMERA CONTROLLER ================= */
 const C={focus:null,ground:false,fixed:new V3(),gFixed:new V3(),alt:600,gAlt:120,th:0.6,gTh:0.6,ph:1.05,gPh:1.05,minAlt:3,maxAlt:300,flight:null};
 const _c=new V3(),_fq=new THREE.Quaternion(),_qs=new THREE.Quaternion(),_rad=new V3(),_nor=new V3(),_look=new V3(),_up=new V3(),_x=new V3(),_z=new V3(),_m4=new THREE.Matrix4(),Y=new V3(0,1,0);
@@ -2636,6 +2659,7 @@ function focusBody(body,{ground,alt,dur=2.4}){
   if(body.kind==='star'){C.minAlt=body.R*0.3;C.maxAlt=body===SUN?300:Math.max(exoAlt*2.5,80);}else{C.minAlt=body.R*0.0006;C.maxAlt=body.R*16;}
 }
 
+await yieldUI();
 /* ================= TIER MANAGEMENT ================= */
 let tier='solar',orbitsOn=true,labelsOn=true,selected=null;
 const TIERS={
@@ -2801,6 +2825,7 @@ function resetView(){
   else if(tier==='surface'){C.gAlt=C.focus.R*2.6;C.gPh=1.1;}
 }
 
+await yieldUI();
 /* ================= SELECTION + TELEMETRY ================= */
 const grid=$('#tGrid');
 grid.innerHTML=[0,1,2,3].map(i=>`<div class="m"><div class="ml" id="ml${i}"></div><div class="mv mono" id="mv${i}"></div><div class="ms" id="ms${i}"></div></div>`).join('');
@@ -2946,6 +2971,7 @@ $('#tChips').addEventListener('click',e=>{const b=e.target.closest('[data-body]'
   const eg=e.target.closest('[data-entergal]');if(eg){const k=eg.dataset.entergal;fadeTo(()=>enterGalaxyX(k));return;}
   const en=e.target.closest('[data-enter]');if(en){const n=en.dataset.enter;const op=STAR_OBJ[n]?STAR_OBJ[n].position:(CAT[n]&&CAT[n].pos);if(tier==='neighborhood'&&op&&C.gFixed.distanceTo(op)>0.5){if(STAR_OBJ[n])pickStar(n);else pickCat(n);setTimeout(()=>{if(tier==='neighborhood')fadeTo(()=>enterSystemOf(n));},900);}else fadeTo(()=>enterSystemOf(n));}});
 
+await yieldUI();
 /* ================= FOCUS DROPDOWN ================= */
 function refreshFocusList(){const f=$('#focus');const og=(l,items)=>`<optgroup label="${l}">${items.map(i=>`<option value="${i[0].replace(/"/g,'')}">${i[1]}</option>`).join('')}</optgroup>`;
   const ex=[];Object.keys(EXO).forEach(n=>EXO[n].forEach(p=>ex.push(['exo:'+n+'|'+p[0],n+' '+p[0]+(p[5]===1?' · HZ':'')])));
@@ -2984,6 +3010,7 @@ function goFocus(v){const f=$('#focus'),i=v.indexOf(':'),t=v.slice(0,i),k=v.slic
     f.blur();}
 function pickStar(k){select({type:'star',key:k});const o=STAR_OBJ[k];C.gFixed.copy(o.position);C.gAlt=k==='Sun'?60:22;}
 
+await yieldUI();
 /* ================= INPUT ================= */
 const toastEl=$('#toast');let toastT=0;
 function toast(msg,ms=2200){toastEl.textContent=msg;toastEl.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>toastEl.classList.remove('on'),ms);}
@@ -3137,6 +3164,7 @@ const SEARCH=(()=>{const L=[];const add=(v,n,sub)=>L.push({v,n,sub,k:n.toLowerCa
   add('gal:milkyway','Milky Way centre','our galaxy');add('iss:iss','ISS','space station · orbits Earth');CRAFT.list.forEach(it=>add('craft:'+it.key,it.name,'spacecraft · '+it.I[1]));add('iss:iss','International Space Station','space station · orbits Earth');
   return L;})();
 $('#search').placeholder=`Search planets, ${fmt(N_CAT_PL)} exoplanets, stars, galaxies, black holes…`;
+await yieldUI();
 /* ================= REAL SKY: measured stars, constellations and deep-sky objects =================
    Loaded from data files beside the page (so the page itself stays light):
    · 15,696 stars to magnitude 7 with distances, colours and catalogue numbers (HYG database v4.1, CC BY-SA 4.0)
@@ -3314,6 +3342,7 @@ loadRealSky();
   hold($('#zIn'),0.8);hold($('#zOut'),1.25);
   addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.key==='+'||e.key==='=')zoomBy(0.8,140);if(e.key==='-'||e.key==='_')zoomBy(1.25,140);});})();
 
+await yieldUI();
 /* ================= COCKPIT MODE =================
    First-person flight at every scale. Speed adapts to the nearest object (fast in empty space, gentle near a surface);
    physical speed and distance are recovered by inverting each tier's display scale. */
@@ -3377,6 +3406,7 @@ function targetOf(){const s=selected;if(!s)return null;
 function targetDistKm(T){if(T.dly)return T.dly*LY_KM;if(TS)return Math.max(camera.position.distanceTo(T.pos)-T.R,0)*KMU;const d=camera.position.distanceTo(T.pos);
   if(inSystem()&&T.body&&(d<T.R*30||active!=='sol'))return Math.max(d-T.R,0)/T.R*T.Rkm;
   return Math.max(physOf(T.pos).distanceTo(physOf(camera.position))-(tier==='neighborhood'||tier==='universe'?0:0),0);}
+await yieldUI();
 /* ================= REAL FLIGHT PHYSICS (cockpit, inside a planetary system) =================
    Newtonian gravity from the star and every planet and moon, at true masses, sizes and distances. The ship is integrated
    with a leapfrog scheme in kilometres and seconds; the bodies keep moving on their own orbits while it flies. */
@@ -3801,6 +3831,7 @@ function drawFlare(W,H){
   hctx.restore();}
 
 
+await yieldUI();
 /* ================= TRUE SCALE (cockpit inside a system) =================
    Real radii and real distances relative to the ship. 1 scene unit = 1,000 km; the ship sits at the origin
    (floating origin) and every body is placed at (its true position − ship position), so precision never degrades. */
@@ -4016,12 +4047,14 @@ addEventListener('keydown',e=>{if(e.target.tagName==='INPUT'&&e.target.type!=='r
   if(e.code.startsWith('Arrow')||e.code==='Space')e.preventDefault();});
 addEventListener('keyup',e=>{CK.keys[e.code]=false;});
 addEventListener('blur',()=>{CK.keys={};});
+await yieldUI();
 /* ================= AUDIO (cockpit cabin only) ================= */
 let audio=null;
 function audioCtx(){if(audio)return audio;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return null;
   try{if(navigator.audioSession)navigator.audioSession.type='playback';}catch(e){} // iPhone: play even with the ringer switch on silent (Safari 17+)
   audio={ctx:new AC()};return audio;}
 
+await yieldUI();
 /* ================= INTERFACE ON/OFF =================
    Hides every panel and bar so only the view is left. H toggles it; while hidden, a small button in the corner (brighter when the
    pointer moves) brings it back. Labels in the scene, messages, dialogs and the cockpit's own instruments stay. */
@@ -4038,6 +4071,7 @@ function audioCtx(){if(audio)return audio;const AC=window.AudioContext||window.w
   addEventListener('pointermove',()=>{if(!off())return;document.body.classList.add('hudpeek');clearTimeout(peekT);peekT=setTimeout(()=>document.body.classList.remove('hudpeek'),2200);},{passive:true});
 })();
 
+await yieldUI();
 /* ================= TV MODE =================
    A hands-free tour for a television: no interface, the camera slowly circling each stop, a small caption. Started from the title
    screen ("Watch on TV", or ?tv=1). Remote: right/left skip, OK or Space pauses, Back or Esc leaves. */
@@ -4269,12 +4303,14 @@ function frame(now){
   fpsAcc+=dt;fpsN++;fpsT+=dt;
   if(fpsT>4){const fps=fpsN/fpsAcc;fpsAcc=0;fpsN=0;fpsT=0;if(!autoDropped&&quality==='ultra'&&fps<24){autoDropped=true;setQuality('hd');toast('Switched to Smooth quality for faster frames. Tap Quality to switch back.',4000);}}
 }
+await yieldUI();
 // boot
 buildSky('Sun');
 // start free in the Solar System: the camera circles a point at the Sun, not the Sun itself, so you can roam from the first moment
 C.focus=null;scene.updateMatrixWorld();SUN.pivot.getWorldPosition(C.fixed);C.gFixed.copy(C.fixed);freeLimits();applyTierUI();select({type:'body',key:'sun'});
 camera.position.set(0,400,700);camera.lookAt(0,0,0);
 requestAnimationFrame(t=>{last=t;frame(t);});
+window.__explorerReady=true;dispatchEvent(new Event('cosmossian:ready'));
 
 })();
 </script>
