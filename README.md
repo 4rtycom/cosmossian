@@ -119,7 +119,7 @@ A one-time `gaia` job (on the 3-hourly run; it skips once the file exists) queri
 
 ## TV mode
 
-"Watch on TV" on the title screen opens a small panel. **Cast to TV** appears where the browser can present to a Chromecast or Google TV (Presentation API: Chrome renders `/?tv=1` itself and streams it to the TV). **Start TV mode on this screen** goes full screen here, for screen mirroring or AirPlay. A smart-TV browser can open `cosmossian.com/?tv=1` directly. TV mode passes the human check, then runs a hands-free tour with no interface or labels: Solar System, Earth, ISS, Moon, Jupiter, Saturn, Sun, Orion Nebula, M87*, Milky Way. About 25 s per stop, the camera slowly circling, with a caption. Remote: right/left skip, OK or Space pauses, Back or Esc leaves. Stops are in `TV_STOPS` in `public/index.html`.
+"Watch on TV" on the title screen opens a small panel. **Cast to TV** appears where the browser can present to a Chromecast or Google TV (Presentation API: Chrome renders `/?tv=1` itself and streams it to the TV). **Start TV mode on this screen** goes full screen here, for screen mirroring or AirPlay. A smart-TV browser can open `cosmossian.com/?tv=1` directly. TV mode passes the human check, then runs a hands-free tour with no interface, labels, layers or orbit lines (the visitor's own settings come back afterwards): Solar System, Earth, Moon, Jupiter, Saturn, Sun, Orion Nebula, M87*, Milky Way. Each stop shows four facts, one every 7.5 s of real time, while the camera slowly circles. Remote: right/left skip, OK or Space pauses, Back or Esc leaves. Stops are in `TV_STOPS` in `public/index.html`.
 
 ## Routes
 

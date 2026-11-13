@@ -340,6 +340,7 @@ body.tv,body.tv canvas{cursor:none}
 #tvCap{position:fixed;left:calc(5vw + env(safe-area-inset-left,0px));bottom:calc(7vh + env(safe-area-inset-bottom,0px));max-width:min(620px,80vw);z-index:40;font-family:Inter,system-ui,sans-serif;color:#fff;opacity:0;transform:translateY(8px);transition:opacity 1.2s ease,transform 1.2s ease;pointer-events:none;text-shadow:0 2px 18px rgba(0,0,0,.8)}
 #tvCap.on{opacity:1;transform:none}
 #tvCap b{display:block;font-weight:300;font-size:clamp(28px,3.6vw,56px);letter-spacing:.08em}
+#tvCap span{transition:opacity .45s ease}#tvCap span.out{opacity:0}
 #tvCap span{display:block;margin-top:8px;font-size:clamp(14px,1.4vw,22px);line-height:1.45;color:#d5dae2}
 #hudShow{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:60;width:42px;height:42px;border-radius:12px;display:none;place-items:center;padding:0;cursor:pointer;color:#e6e9ee;background:rgba(10,14,20,.45);border:1px solid rgba(255,255,255,.16);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:.3;transition:opacity .4s ease}
 #hudShow svg{width:18px;height:18px}
@@ -487,7 +488,7 @@ body.cockpit .rail{display:none}
     <a id="introTv" class="tvbtn" href="#" role="button" aria-haspopup="dialog" aria-expanded="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="8.5" rx="1.2"/><path d="M5.5 14h5M8 11.5V14"/></svg>Watch on TV</a>
     <div id="tvPanel" class="tvpanel" role="dialog" aria-label="Watch on TV" hidden>
       <p class="tvh">Watch on your TV</p>
-      <p class="tvt">A hands-free tour: the planets, the ISS, a nebula, a black hole and the Milky Way. On the TV: arrows skip, OK pauses, Back leaves.</p>
+      <p class="tvt">A hands-free tour: the planets, the Sun, a nebula, a black hole and the Milky Way, with something to learn at every stop. On the TV: arrows skip, OK pauses, Back leaves.</p>
       <button type="button" id="tvCast" class="tvgo" hidden><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="8.5" rx="1.2"/><path d="M5.5 14h5M8 11.5V14"/></svg>Cast to TV</button>
       <button type="button" id="tvHere" class="tvgo alt">Start TV mode on this screen</button>
       <p class="tvt small">Then share this screen: in Chrome use <b>⋮ › Cast</b>; on an iPhone or Mac use <b>Screen Mirroring</b> (AirPlay). On a smart TV, open <b>cosmossian.com/?tv=1</b> in its browser.</p>
@@ -2514,7 +2515,7 @@ const CRAFT=(()=>{const D=jsonBlock('craft');const list=[];if(!D||!D.craft)retur
     out.set(0,0,0).addScaledVector(a,-0.5*t3+t2-0.5*t).addScaledVector(b,1.5*t3-2.5*t2+1).addScaledVector(c2,-1.5*t3+2*t2+0.5*t).addScaledVector(d,0.5*t3-0.5*t2);return true;}
   // planets are drawn far larger than true scale, so a craft close to one (Juno at Jupiter, JWST beyond Earth) is drawn just outside
   // that planet's globe, in its true direction from the planet
-  function update(jd){list.forEach(it=>{it.ok=at(it,jd,it.au);it.o.visible=it.ok&&solar.visible;if(!it.ok)return;
+  function update(jd){list.forEach(it=>{it.ok=at(it,jd,it.au);it.o.visible=it.ok&&solar.visible&&!TV.on;if(!it.ok)return;
     let near=null,best=0.05;planetList.forEach(pl=>{if(!pl.h)return;const d=Math.hypot(it.au.x-pl.h.x,it.au.y-pl.h.y,it.au.z-pl.h.z);if(d<best){best=d;near=pl;}});
     if(near){_p.set(it.au.x-near.h.x,it.au.z-near.h.z,-(it.au.y-near.h.y));if(_p.lengthSq()<1e-18)_p.copy(near.pivot.position);_p.normalize().multiplyScalar(near.R*(near.key==='earth'?5:2.4));it.o.position.copy(near.pivot.position).add(_p);}
     else distMap(it.au.x,it.au.y,it.au.z,it.o.position);});}
@@ -4027,28 +4028,70 @@ function audioCtx(){if(audio)return audio;const AC=window.AudioContext||window.w
 /* ================= TV MODE =================
    A hands-free tour for a television: no interface, the camera slowly circling each stop, a small caption. Started from the title
    screen ("Watch on TV", or ?tv=1). Remote: right/left skip, OK or Space pauses, Back or Esc leaves. */
-const TV={on:false,i:-1,t:0,paused:false,capT:0,cap:null};
+const TV={on:false,i:-1,t:0,paused:false,cap:null,f:0,fT:0,saved:null};
+// each stop: a name and a few facts, shown one after another while the camera circles
 const TV_STOPS=[
- {name:'The Solar System',text:'Eight planets on their real orbits around the Sun, as they are today.',go:()=>{if((tier==='solar'||tier==='surface')&&active==='sol')solarOverview();else fadeTo(()=>enterSolar());}},
- {name:'Earth',text:'With today\u2019s clouds as NASA\u2019s satellites saw them, and the aurora where NOAA forecasts it.',go:()=>goFocus('body:earth')},
- {name:'International Space Station',text:'NASA\u2019s 3D model, flying its real orbit about 420 km up.',go:()=>goFocus('iss:iss')},
- {name:'The Moon',text:'Earth\u2019s companion, 384,400 km away.',go:()=>goFocus('body:moon')},
- {name:'Jupiter',text:'The largest planet: a storm bigger than Earth has raged on it for centuries.',go:()=>goFocus('body:jupiter')},
- {name:'Saturn',text:'Its rings are mostly ice, hundreds of thousands of kilometres wide and often only about ten metres thick.',go:()=>goFocus('body:saturn')},
- {name:'The Sun',text:'An ordinary star, 4.6 billion years old, holding 99.86% of the Solar System\u2019s mass.',go:()=>goFocus('body:sun')},
- {name:'The Orion Nebula',text:'A stellar nursery 1,344 light-years away, lit by the young stars inside it.',go:()=>{const i=SKY.ready?SKY.dso.findIndex(o=>o[5]==='M 42'):-1;if(i>=0)goFocus('neb:dso:'+i);else tvNext(1);}},
- {name:'M87*',text:'A black hole of 6.5 billion Suns. Its gravity bends the light of everything behind it.',go:()=>{if(!fading)fadeTo(()=>enterBH('m87'));}},
- {name:'The Milky Way',text:'Our galaxy: 100 to 400 billion stars, and the Sun is one of them.',go:()=>goFocus('gal:milkyway')}];
-function tvCaption(st){if(!TV.cap){TV.cap=document.createElement('div');TV.cap.id='tvCap';document.body.appendChild(TV.cap);}
-  TV.cap.innerHTML='<b></b><span></span>';TV.cap.firstChild.textContent=st.name;TV.cap.lastChild.textContent=st.text;TV.cap.classList.add('on');TV.capT=9;}
-function tvNext(d){if(!TV.on)return;TV.i=(TV.i+d+TV_STOPS.length)%TV_STOPS.length;TV.t=0;const st=TV_STOPS[TV.i];
-  if(CK.on)$('#bCockpit').click();try{st.go();}catch(e){console.warn('TV stop failed',st.name,e);}tvCaption(st);}
-function tvStart(){if(TV.on)return;TV.on=true;TV.paused=false;document.body.classList.add('nohud','tv');TV.i=-1;tvNext(1);}
-function tvStop(){if(!TV.on)return;TV.on=false;document.body.classList.remove('nohud','tv','hudpeek');if(TV.cap)TV.cap.classList.remove('on');
+ {name:'The Solar System',go:()=>{if((tier==='solar'||tier==='surface')&&active==='sol')solarOverview();else fadeTo(()=>enterSolar());},facts:[
+  'Eight planets circle the Sun, each shown where it really is today.',
+  'Sunlight takes about 8 minutes to reach Earth, and more than 4 hours to reach Neptune.',
+  'The Sun holds 99.86% of all the mass in the Solar System.',
+  'Distances are compressed here, so the outer planets fit on the screen.']},
+ {name:'Earth',go:()=>goFocus('body:earth'),facts:[
+  'The only world known to have life, and liquid water on its surface.',
+  'These are real clouds: the last full day of them, as NASA’s satellites photographed them.',
+  'Earth turns once every 23 hours 56 minutes and circles the Sun at about 30 km per second.',
+  'On the night side, city lights trace where people live.']},
+ {name:'The Moon',go:()=>goFocus('body:moon'),facts:[
+  'Earth’s only natural satellite, 384,400 km away on average.',
+  'It always shows us the same face: it turns exactly once for every orbit.',
+  'Twelve astronauts walked on its surface between 1969 and 1972.',
+  'It drifts about 3.8 cm farther from Earth every year.']},
+ {name:'Jupiter',go:()=>goFocus('body:jupiter'),facts:[
+  'The largest planet: more than twice the mass of all the other planets put together.',
+  'Its Great Red Spot is a storm wider than Earth, watched for more than 150 years.',
+  'A day on Jupiter lasts less than 10 hours.',
+  'Its moon Ganymede is the largest moon in the Solar System, bigger than the planet Mercury.']},
+ {name:'Saturn',go:()=>goFocus('body:saturn'),facts:[
+  'Its rings are mostly water ice, in pieces from dust grains to chunks the size of a house.',
+  'The main rings are about 280,000 km across, yet mostly only about ten metres thick.',
+  'Saturn is so light for its size that it is less dense than water.',
+  'Its largest moon, Titan, has a thick atmosphere and lakes of liquid methane.']},
+ {name:'The Sun',go:()=>goFocus('body:sun'),facts:[
+  'An ordinary yellow star, about 4.6 billion years old: halfway through its life.',
+  'In its core, at about 15 million °C, it fuses some 600 million tonnes of hydrogen every second.',
+  'The grains on its surface are rising columns of hot gas, each about 1,000 km across.',
+  'In about 5 billion years it will swell into a red giant.']},
+ {name:'The Orion Nebula',go:()=>{const i=SKY.ready?SKY.dso.findIndex(o=>o[5]==='M 42'):-1;if(i>=0)goFocus('neb:dso:'+i);else tvNext(1);},facts:[
+  'A stellar nursery about 1,344 light-years away, where new stars are being born.',
+  'The nearest large star-forming region to Earth.',
+  'Its glow is hydrogen gas lit up by the hot young stars of the Trapezium cluster inside it.',
+  'You can see it with the naked eye, as a fuzzy patch in Orion’s sword.']},
+ {name:'M87*',go:()=>{if(!fading)fadeTo(()=>enterBH('m87'));},facts:[
+  'A black hole 6.5 billion times the mass of the Sun, at the heart of the galaxy M87, 55 million light-years away.',
+  'In 2019 it became the first black hole ever photographed, by the Event Horizon Telescope.',
+  'Its gravity bends light: the glowing disk behind it appears lifted above and below the black shadow.',
+  'It fires a jet of particles about 5,000 light-years long, at nearly the speed of light.']},
+ {name:'The Milky Way',go:()=>goFocus('gal:milkyway'),facts:[
+  'Our galaxy: a barred spiral of 100 to 400 billion stars.',
+  'It is about 100,000 light-years across; the Sun sits some 26,000 light-years from its centre.',
+  'The Sun takes about 230 million years to travel once around it.',
+  'At its heart lies Sagittarius A*, a black hole of 4.3 million Suns.']}];
+const TV_FACT=7.5; // seconds per fact
+function tvShow(){const st=TV_STOPS[TV.i];if(!TV.cap){TV.cap=document.createElement('div');TV.cap.id='tvCap';TV.cap.innerHTML='<b></b><span></span>';document.body.appendChild(TV.cap);}
+  const b=TV.cap.firstChild,sp=TV.cap.lastChild;b.textContent=st.name;sp.classList.add('out');
+  setTimeout(()=>{sp.textContent=st.facts[TV.f%st.facts.length];sp.classList.remove('out');},TV.f?450:0);TV.cap.classList.add('on');}
+function tvNext(d){if(!TV.on)return;TV.i=(TV.i+d+TV_STOPS.length)%TV_STOPS.length;TV.t=0;TV.f=0;TV.fT=0;const st=TV_STOPS[TV.i];
+  if(CK.on)$('#bCockpit').click();try{st.go();}catch(e){console.warn('TV stop failed',st.name,e);}tvShow();}
+// the tour shows the sky clean: every layer and the orbit lines off, without touching the visitor's saved choices
+function tvStart(){if(TV.on)return;TV.on=true;TV.paused=false;TV.saved={lf:Object.assign({},LF),orbits:orbitsOn};
+  Object.keys(LF).forEach(k=>LF[k]=false);orbitsOn=false;document.body.classList.add('nohud','tv');TV.i=-1;tvNext(1);}
+function tvStop(){if(!TV.on)return;TV.on=false;if(TV.saved){Object.assign(LF,TV.saved.lf);orbitsOn=TV.saved.orbits;TV.saved=null;}
+  document.body.classList.remove('nohud','tv','hudpeek');if(TV.cap)TV.cap.classList.remove('on');
   if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});toast('TV mode ended',2000);}
-function tvTick(dt){if(!TV.on)return;if(TV.capT>0){TV.capT-=dt;if(TV.capT<=0&&TV.cap)TV.cap.classList.remove('on');}
-  if(TV.paused||fading)return;if(!C.flight)C.gTh+=dt*0.05; // a slow circle around each stop
-  TV.t+=dt;if(TV.t>(TV_STOPS[TV.i].dur||25))tvNext(1);}
+function tvTick(dt){const now=performance.now()/1000,rdt=Math.min(1,now-(TV.last||now));TV.last=now; // facts run on real time, even on a slow TV
+  if(!TV.on||TV.paused||fading)return;if(!C.flight)C.gTh+=dt*0.05; // a slow circle around each stop
+  const st=TV_STOPS[TV.i];TV.t+=rdt;TV.fT+=rdt;
+  if(TV.fT>TV_FACT){TV.fT=0;TV.f++;if(TV.f>=st.facts.length){tvNext(1);return;}tvShow();}}
 addEventListener('cosmossian:entered',()=>{if(window.__tv)setTimeout(tvStart,600);});
 if(window.__tv&&!window.__intro)setTimeout(tvStart,600); // the title screen may have finished before this script ran
 addEventListener('keydown',e=>{if(!TV.on)return;const k=e.key;let used=true;
