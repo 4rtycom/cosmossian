@@ -776,6 +776,7 @@ body.cockpit .rail{display:none}
       <li><b>Moon</b>: Lunar Reconnaissance Orbiter colour mosaic with laser-altimeter elevation (NASA, as packaged with the open-source globe.gl library).</li>
       <li><b>Mars</b>: Viking orbiter colour mosaic from the NASA 3D Resources collection.</li>
       <li><b>Cockpit</b>: the switch panels, centre-console keypads and monitor frames are photographs of Space Shuttle Columbia's flight deck (NASA Johnson Space Center, 2001, from the NASA 3D Resources collection). The window frames and glareshield around them are modelled, and the monitors show live Cosmossian data rather than Shuttle software.</li>
+      <li><b>Asteroid shapes</b>: Bennu, Eros, Itokawa, Vesta and Kleopatra are drawn from NASA 3D Resources shape models (public domain), simplified for the web. Other small bodies stay as dots because their true shape is not known.</li>
       <li><b>Other planets and moons</b>: Io, Europa, Ganymede, Callisto, Phobos, Deimos, Titania, Oberon and the Venus radar surface are spacecraft mosaics from the NASA 3D Resources collection (Galileo, Voyager, Viking, Magellan). Mercury, Venus’s cloud tops, Uranus, Enceladus and Triton are spacecraft-based maps distributed with the Stellarium planetarium (Oleg Pluton, CC BY 4.0; NASA/JPL and the Cassini imaging team). Where a spacecraft never photographed part of a moon (Callisto, Titania, Oberon), that part is generated. Titan stays generated because its haze hides the surface. Jupiter, Saturn and Neptune use 4,096-pixel true-colour maps by Askaniy Anpilogov, built from NASA/JPL-Caltech, Cassini, Juno and Voyager data and Björn Jónsson’s mosaics (CC BY 3.0, as distributed with Celestia).</li>
       <li><b>Nebulae you can fly into</b>: built as glowing volumes from each nebula’s class: hydrogen glows red, oxygen teal, dust blocks light, and the hot stars inside light the gas. Colours and shapes follow the real objects (for example the Ring’s shell, the Eagle’s pillars, the Veil’s filaments), but the 3D structure is a physical model, not a photograph or a measured map.</li>
       <li><b>The sky</b>: 15,696 real stars down to magnitude 7, with distances, colours and Hipparcos / Henry Draper numbers, from the HYG database v4.1 (David Nash, astronexus; CC BY-SA 4.0). Each star is placed in three dimensions, so the sky seen from another star’s system is redrawn from there. In this app the sky’s equator is laid along the plane of the planets’ orbits; in reality the two are tilted by 23.4°.</li>
@@ -2346,7 +2347,7 @@ const sbGeo=new THREE.BufferGeometry();
 const sbPts=new THREE.Points(sbGeo,new THREE.PointsMaterial({size:7,sizeAttenuation:false,map:TEX_GLOW,vertexColors:true,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending}));
 sbPts.frustumCulled=false;sbPts.visible=false;sbGeo.boundingSphere=new THREE.Sphere(new V3(),1e12);solar.add(sbPts);
 const sbOrbit=new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({length:361},()=>new V3())),new THREE.LineBasicMaterial({color:0xffaa00,transparent:true,opacity:.55}));sbOrbit.frustumCulled=false;sbOrbit.visible=false;solar.add(sbOrbit);
-const SB_FAMOUS=/^(1|2|3|4|5|6|7|10|15|16|21|52|87|243|253|433|511|588|624|704|951|1036|1221|1862|2060|2062|2867|3200|4179|5535|9969|10199|25143|65803|99942|101955|162173) |^(1P|2P|9P|12P|13P|17P|19P|21P|46P|55P|67P|73P|81P|96P|103P|109P)\/|Hale-Bopp|NEOWISE|Hyakutake|Tsuchinshan|Borisov|Oumuamua|3I\//;
+const SB_FAMOUS=/^(1|2|3|4|5|6|7|10|15|16|21|52|216|87|243|253|433|511|588|624|704|951|1036|1221|1862|2060|2062|2867|3200|4179|5535|9969|10199|25143|65803|99942|101955|162173) |^(1P|2P|9P|12P|13P|17P|19P|21P|46P|55P|67P|73P|81P|96P|103P|109P)\/|Hale-Bopp|NEOWISE|Hyakutake|Tsuchinshan|Borisov|Oumuamua|3I\//;
 const sbAnchors=[];
 SB.forEach((o,i)=>{if(o[1]==='asteroid'||o[1]==='comet'){if(!SB_FAMOUS.test(o[0]))return;}
   if(o[12]==='live'&&!(o[8]<6.5))return;const a=new THREE.Object3D();solar.add(a);const L=addLabel(sbName(o),a,o[1]==='comet'?'moon':'body',()=>sbPts.visible&&tier==='solar'&&(C.alt<200||o[1]!=='asteroid'),'','smallbodies');L.pick={type:'sb',key:i};sbAnchors.push([i,a]);});
@@ -2379,7 +2380,31 @@ function sbInfo(i){const o=SB[i],q=o[2],e=o[3],a=e<1?q/(1-e):0,P=a?Math.pow(a,1.
 function sbTele(i){const o=SB[i],e=o[3],a=e<1?o[2]/(1-e):0,P=a?Math.pow(a,1.5):0;sbPos(o,simJD,_sbv);const r=_sbv.length();const eh=bodies.earth.h||helio(bodies.earth,simJD);const d=Math.hypot(_sbv.x-eh.x,_sbv.y-eh.y,_sbv.z-eh.z);
   setMetrics([['FROM THE SUN',fmt(r,r<10?3:1)+' AU','now'],['FROM EARTH',fmt(d,d<10?3:1)+' AU',fmt(d*AU_KM/1e6,d<1?2:0)+' M km now'],['ORBIT PERIOD',P?(P<2?fmt(P*365.25,0)+' days':fmt(P,P<100?2:0)+' yr'):'none','e = '+fmt(e,3)],
     [o[9]?'DIAMETER':'BRIGHTNESS',o[9]?fmt(o[9]*2,o[9]<5?1:0)+' km':'H = '+o[8],o[9]?'':'absolute magnitude']]);}
+// NASA's own shape models (NASA 3D Resources, public domain) for the asteroids that spacecraft have mapped; they take over from the
+// dot when the camera comes close. Everything else keeps its dot (nothing is known of its true shape).
+const SB_MODEL=[[/^101955 /,'bennu'],[/^433 /,'eros'],[/^25143 /,'itokawa'],[/^4 /,'vesta'],[/^216 /,'kleopatra']],SB_MR=0.01;
+const SBM=(()=>{const map={},list=[];
+  sbAnchors.forEach(([i,a])=>{const f=(SB_MODEL.find(m=>m[0].test(SB[i][0]))||[])[1];if(!f)return;
+    const it={i,f,a,m:null,ms:0,name:sbName(SB[i])};it.F={key:'sb:'+i,kind:'craft',name:it.name,pivot:a,tilt:a,spin:0,R:SB_MR,Rkm:1,parent:null,moons:[]};map[i]=it;list.push(it);});
+  const script=src=>new Promise((res,rej)=>{if(document.querySelector('script[data-src="'+src+'"]'))return res();const e=document.createElement('script');e.dataset.src=src;e.src=src;e.onload=res;e.onerror=()=>rej(new Error(src));document.head.appendChild(e);});
+  function load(it){if(it.ms)return;it.ms=1;toast('Loading NASA\u2019s shape model of '+it.name+'\u2026',60000);
+    const fail=()=>{it.ms=0;toast('The shape model of '+it.name+' could not be loaded.',3200);};
+    script('lib/three/GLTFLoader.js').then(()=>script('lib/three/DRACOLoader.js')).then(()=>{
+      const dl=new THREE.DRACOLoader();dl.setDecoderPath('lib/draco/');const gl=new THREE.GLTFLoader();gl.setDRACOLoader(dl);
+      gl.load('models/ast/'+it.f+'.glb',gltf=>{
+        const root=gltf.scene;root.traverse(o=>{if(o.isMesh){if(!o.geometry.attributes.normal)o.geometry.computeVertexNormals();
+          o.material=new THREE.MeshStandardMaterial({color:o.material.color.clone().multiplyScalar(it.f==='bennu'?1:.42),roughness:.97,metalness:0});}});
+        const box=new THREE.Box3().setFromObject(root),size=box.getSize(new V3()),c=box.getCenter(new V3());
+        root.position.sub(c);const k=new THREE.Group();k.add(root);k.scale.setScalar(2*SB_MR/Math.max(size.x,size.y,size.z));
+        const w=new THREE.Group();w.add(k);w.visible=false;it.a.add(w);it.m=w;it.ms=2;dl.dispose();toast(it.name+': NASA shape model',2400);
+      },undefined,fail);}).catch(fail);}
+  const _q=new V3();
+  function tick(now){for(const it of list){if(!it.m)continue;it.a.getWorldPosition(_q);const d=camera.position.distanceTo(_q);
+    const px=d>0?SB_MR/d/Math.tan(camera.fov*Math.PI/360)*(renderer.domElement.clientHeight||innerHeight)/2:1e9;
+    it.m.visible=px>6&&sbPts.visible;it.m.rotation.y=now*0.00006;}}
+  return{map,list,load,tick};})();
 function selectSB(i){select({type:'sb',key:i});sbOrbitLine(SB[i]);
+  {const it=SBM.map[i];if(it&&!CK.on&&!TS&&sbPts.visible&&(tier==='solar')&&active==='sol'){SBM.load(it);focusBody(it.F,{ground:false,alt:SB_MR*4.6,dur:2.6});C.minAlt=SB_MR*0.3;C.maxAlt=400;applyTierUI();return;}}
   if(!CK.on&&tier==='solar'&&(C.focus===SUN||!C.focus)){sbPos(SB[i],simJD,_sbv);const rd=9*Math.pow(Math.max(_sbv.length(),0.05),0.6);C.gAlt=clamp(rd*1.9,25,300);}}
 
 /* ---------- meteor showers: where Earth crosses each dust stream ---------- */
@@ -2952,7 +2977,7 @@ function teleMore(s){const el=$('#tMore');if(!el)return;let rows=[],extra='';
   const starDisc=(n,o)=>{if(DISC_STAR[n])return DISC_STAR[n];if(n==='Sun')return null;if(o&&o.L&&o.ly&&4.74-2.5*Math.log10(o.L)+5*Math.log10(o.ly/3.26156/10)<4.5)return ANTIQ;return null;};
   if(s.type==='star'||s.type==='cat'){const I=starInfo(s.key);if(I){rows=starRows(I.o);const sd=starDisc(s.key,I.o);if(sd)rows.push(['Discovered',sd]);extra=planetTable(s.key,I.pl);}}
   else if(s.type==='hyg'||s.type==='dso'||s.type==='con'){rows=skyRows(s);}
-  else if(s.type==='sb'&&SB[s.key]){const o=SB[s.key];if(o[11])rows.push(['Discovered',o[11]+(o[10]?' · '+o[10]:'')]);}
+  else if(s.type==='sb'&&SB[s.key]){const o=SB[s.key];if(o[11])rows.push(['Discovered',o[11]+(o[10]?' · '+o[10]:'')]);if(SBM.map[s.key])rows.push(['3D model','NASA 3D Resources']);}
   else if(s.type==='craft'){const it=CRAFT.list.find(x=>x.key===s.key);rows=[['Agency',it.I[1]],['Launched',it.I[2]],['Position','JPL Horizons, updated daily'+(CRAFT.D&&CRAFT.D.date?' ('+CRAFT.D.date+')':'')]];if(it.M)rows.push(['3D model','NASA 3D Resources']);}
   else if(s.type==='iss'){rows=[['Orbit data',ISS.EL&&ISS.EL.EPOCH?'CelesTrak, epoch '+ISS.EL.EPOCH.slice(0,16).replace('T',' ')+' UTC':'not available'],['First module','Zarya, launched 20 November 1998'],['Crewed since','2 November 2000'],['Partners','NASA, Roscosmos, ESA, JAXA, CSA'],['Orbit inclination','51.6°'],['3D model','NASA 3D Resources (public domain)']];}
   else if(s.type==='body'&&bodies[s.key]){const b=bodies[s.key];
@@ -4300,7 +4325,7 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt=Math.min(0.1,(now-last)/1000);last=now;
   if(WARM.state===1||(window.__intro&&(WARM.state<2||(frame.held=(frame.held||0)+1)>12)))return; // explorer waits behind the entrance screen, and draws its first frames only once the shaders are ready
-  REAL.tick(now);ISS.tick();CRAFT.tick();
+  REAL.tick(now);ISS.tick();CRAFT.tick();SBM.tick(now);
   updateBodies(dt);
   updateTrueScale();
   updateLayers(dt);
