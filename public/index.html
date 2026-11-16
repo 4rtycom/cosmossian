@@ -1415,7 +1415,7 @@ function markerSprite(kind,scale){
   const type=bh?'bh':/supernova|remnant/i.test(kind)?'snr':/nebula/i.test(kind)?'neb':/cluster/i.test(kind)?'gc':/pulsar|magnetar/i.test(kind)?'pulsar':/merger|burst|wave|kilonova/i.test(kind)?'burst':/quasar/i.test(kind)?'quasar':'star';
   const sp=new THREE.Sprite(bh?new THREE.SpriteMaterial({map:markTex('bh'),transparent:true,depthWrite:false}):new THREE.SpriteMaterial({map:markTex(type),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));sp.scale.set(scale,scale,1);return sp;}
 // fixed on-screen size icon (does not balloon when you fly close)
-function iconSprite(kind,px){const sp=markerSprite(kind,1);sp.material.sizeAttenuation=false;sp.scale.set(px,px,1);sp.layers.set(1);return sp;}
+function iconSprite(kind,px){const sp=markerSprite(kind,1);sp.material.sizeAttenuation=false;sp.scale.set(px,px,1);sp.layers.set(1);sp.material.opacity=0;return sp;}
 function spriteMat(tex,color,opacity=1){return new THREE.SpriteMaterial({map:tex,color:new THREE.Color(color),transparent:true,opacity,blending:THREE.AdditiveBlending,depthWrite:false});}
 
 await yieldUI();
