@@ -1754,12 +1754,12 @@ function genGalaxy(type,S,seed,opt){opt=opt||{};
 }
 const ugalScale=d=>150*Math.log10(1+d/0.02);
 GALAXIES.forEach((G,i)=>{
-  const S=24*(G[7]/100),ra=G[4]*15*DEG,dec=G[5]*DEG,r=ugalScale(G[6]);
+  const dM=Math.max(G[6],0.2),S=G[0]==='mw'?24:Math.max(G[7]/1000*150/(Math.LN10*(dM+0.02)),0.02),ra=G[4]*15*DEG,dec=G[5]*DEG,r=ugalScale(G[6]);
   const grp=genGalaxy(G[3],S,i*7+3);
   grp.position.set(r*Math.cos(dec)*Math.cos(ra),r*Math.sin(dec),-r*Math.cos(dec)*Math.sin(ra));
   const rr=rng(i*13+5);grp.rotation.set((rr()-.5)*2.4,rr()*TAU,(rr()-.5)*1.2);if(G[0]==='mw')grp.rotation.set(0.35,0,0.1);if(G[0]==='m104'||G[0]==='ngc5866')grp.rotation.set(1.45,rr()*TAU,0);
   universe.add(grp);
-  const hit=new THREE.Mesh(UHIT_G,UHIT_M);hit.scale.setScalar(S*1.1);hit.position.copy(grp.position);hit.userData.pick={type:'ugal',key:G[0]};universe.add(hit);ugalPick.push(hit);
+  const hit=new THREE.Mesh(UHIT_G,UHIT_M);hit.scale.setScalar(Math.max(S*1.1,5));hit.position.copy(grp.position);hit.userData.pick={type:'ugal',key:G[0]};{const g=new THREE.BufferGeometry(),w=G[3]==='elliptical'?[1,.86,.7]:G[3]==='irregular'?[.8,.9,1]:[.85,.92,1],kk=Math.min(1,.35+G[7]/200);g.setAttribute('position',new THREE.Float32BufferAttribute([grp.position.x,grp.position.y,grp.position.z],3));g.setAttribute('aColor',new THREE.Float32BufferAttribute(w.map(v=>v*kk),3));g.setAttribute('aSize',new THREE.Float32BufferAttribute([.9+G[7]/60],1));const m=galMat(7,true,1.6);GAL.mats.push(m);const pt=new THREE.Points(g,m);pt.frustumCulled=false;universe.add(pt);}universe.add(hit);ugalPick.push(hit);
   UGAL[G[0]]={G,S,grp,seed:i*7+3};
   UGAL[G[0]].label=addLabel(G[1]+`<span class="mult">${G[2].split(' · ')[1]||''}</span>`,grp,'gal',()=>tier==='universe','','galaxies');UGAL[G[0]].label.pick={type:'ugal',key:G[0]};
 });
@@ -1800,13 +1800,15 @@ function genCluster(S,seed,n){
 }
 // a bright object with no resolved shape (quasar, black hole, burst) is drawn as the light it really is: a blazing point in a soft halo.
 // TON 618, whose quasar outshines whole galaxies, is by far the brightest thing in the sky, with a pair of faint jets.
-function lightSource(c){const grp=new THREE.Group(),big=c[0]==='ton618',q=/quasar/i.test(c[2]),bh=/black hole/i.test(c[2]);
+const BH_MASS={ton618:4.07e10,'3c273':8.9e8,gw150914:62};
+function lightSource(c){const grp=new THREE.Group(),big=c[0]==='ton618',tm=BH_MASS[c[0]]?Math.min(1,Math.max(0,(Math.log10(BH_MASS[c[0]])-1)/9.6)):0.3,q=/quasar/i.test(c[2]),bh=/black hole/i.test(c[2]);
   const col=q||bh?[.74,.86,1]:/supernova|remnant/i.test(c[2])?[1,.5,.8]:/burst|merger|wave/i.test(c[2])?[.78,.62,1]:[.9,.95,1];
   const add=(sz,gain,max,k)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([0,0,0],3));g.setAttribute('aColor',new THREE.Float32BufferAttribute(col.map(v=>v*(k||1)),3));g.setAttribute('aSize',new THREE.Float32BufferAttribute([sz],1));
     const m=galMat(max,true,gain);GAL.mats.push(m);const p=new THREE.Points(g,m);p.frustumCulled=false;grp.add(p);};
   if(big){add(520,1.1,300,1);add(120,.9,120,1);add(22,1.6,36,1.1);
     const P=[],C=[],S=[],ax=new V3(.35,.93,.12).normalize();for(let s=-1;s<=1;s+=2)for(let i=0;i<260;i++){const t=Math.pow(i/260,1.3)*95,w=.6+t*.03;P.push(ax.x*t*s+(Math.random()-.5)*w,ax.y*t*s+(Math.random()-.5)*w,ax.z*t*s+(Math.random()-.5)*w);const f=(1-i/260)*.8;C.push(.55*f,.7*f,1*f);S.push(.6+Math.random()*.6);}
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('aColor',new THREE.Float32BufferAttribute(C,3));g.setAttribute('aSize',new THREE.Float32BufferAttribute(S,1));const m=galMat(2.4,false,2.2);GAL.mats.push(m);const p=new THREE.Points(g,m);p.frustumCulled=false;grp.add(p);}
+  else if(BH_MASS[c[0]]){const k=Math.pow(tm,8);add(24+330*k,.9,24+200*k,1);add(6+20*k,2,10+30*k,1);}
   else{add(q?70:34,q?.9:.5,q?90:50,1);add(8,2,16,1);}
   return grp;}
 await yieldUI();
