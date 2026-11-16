@@ -1636,11 +1636,11 @@ col*=uGain*uExp;
 gl_FragColor=vec4(col,1.);}`});
    const dg=new THREE.PlaneGeometry(1120,1120);dg.rotateX(-Math.PI/2);const dsk=new THREE.Mesh(dg,dm);dsk.frustumCulled=false;dsk.renderOrder=-1;galaxy.add(dsk);GAL.disk=dsk;}
   const bulge=new THREE.Sprite(spriteMat(TEX_GLOW,'#ffb35c',.12));bulge.scale.set(160,160,1);galaxy.add(bulge);
-  const sgr=iconSprite('black hole',0.08);sgr.userData.pick={type:'gal',key:'sgra'};galaxy.add(sgr);GAL.sgr=sgr;
+  const sgr=iconSprite('black hole',0.08);sgr.material.opacity=0;sgr.userData.pick={type:'gal',key:'sgra'};galaxy.add(sgr);GAL.sgr=sgr;
   const sunPos=new V3(260*Math.cos(a0),0,260*Math.sin(a0));GAL.sunPos=sunPos;
-  const sm=new THREE.Sprite(spriteMat(TEX_GLOW,'#ffaa00',1));sm.position.copy(sunPos);sm.scale.set(16,16,1);sm.userData.pick={type:'gal',key:'sun'};galaxy.add(sm);GAL.sunMarker=sm;GAL.rotItems.push({o:sm,b:sm.position.clone()});
+  const sm=new THREE.Sprite(spriteMat(TEX_GLOW,'#ffaa00',1));sm.position.copy(sunPos);sm.scale.set(16,16,1);sm.material.opacity=0;sm.userData.pick={type:'gal',key:'sun'};galaxy.add(sm);GAL.sunMarker=sm;GAL.rotItems.push({o:sm,b:sm.position.clone()});
   const ringG=new THREE.RingGeometry(9,10,64);ringG.rotateX(-Math.PI/2);
-  const ring=new THREE.Mesh(ringG,new THREE.MeshBasicMaterial({color:0xffaa00,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false}));ring.position.copy(sunPos);galaxy.add(ring);GAL.sunRing=ring;GAL.rotItems.push({o:ring,b:ring.position.clone()});
+  const ring=new THREE.Mesh(ringG,new THREE.MeshBasicMaterial({color:0xffaa00,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false}));ring.position.copy(sunPos);ring.visible=false;galaxy.add(ring);GAL.sunRing=ring;GAL.rotItems.push({o:ring,b:ring.position.clone()});
   addLabel('Sagittarius A*',sgr,'gal',inMW,'','bh').pick={type:'gal',key:'sgra'};
   addLabel('You are here · Sun',sm,'gal',inMW,'','stars').pick={type:'gal',key:'sun'};
   arms.forEach(A=>{const r=400,th=Math.log(r/r0)/b+A.off;const o=new THREE.Object3D();o.position.set(r*Math.cos(th),0,r*Math.sin(th));galaxy.add(o);GAL.rotItems.push({o,b:o.position.clone()});addLabel(A.n,o,'gal',inMW);});
@@ -1666,7 +1666,7 @@ gl_FragColor=vec4(col,1.);}`});
   [150,-150].forEach(y=>{const f=new THREE.Sprite(spriteMat(TEX_GLOW,'#8fb8ff',.05));f.scale.set(230,300,1);f.position.set(0,y,0);galaxy.add(f);});
   MWOBJ.forEach(o=>{const l=o[3]*DEG,bb=o[4]*DEG,d=o[5]/100;
     const dir=toGC.clone().multiplyScalar(Math.cos(bb)*Math.cos(l)).addScaledVector(tg,Math.cos(bb)*Math.sin(l)).add(new V3(0,Math.sin(bb),0));
-    const sp=iconSprite(o[2],/black hole/i.test(o[2])?0.062:0.045);sp.position.copy(sunPos).addScaledVector(dir,d);sp.userData.pick={type:'mwo',key:o[0]};galaxy.add(sp);GAL.objPick.push(sp);GAL.rotItems.push({o:sp,b:sp.position.clone()});
+    const sp=iconSprite(o[2],/black hole/i.test(o[2])?0.062:0.045);sp.material.opacity=0;sp.position.copy(sunPos).addScaledVector(dir,d);sp.userData.pick={type:'mwo',key:o[0]};galaxy.add(sp);GAL.objPick.push(sp);GAL.rotItems.push({o:sp,b:sp.position.clone()});
     if(/cluster/i.test(o[2])){const P=[],Cc=[],Sz=[],n=/globular/i.test(o[2])?160:70,w=/globular/i.test(o[2])?1.1:0.6;
       for(let k=0;k<n;k++){const r=w*Math.pow(Math.random(),1.6)*2.2,ct=Math.random()*2-1,ph=Math.random()*TAU,st=Math.sqrt(1-ct*ct);P.push(r*st*Math.cos(ph),r*ct,r*st*Math.sin(ph));Cc.push(...(/globular/i.test(o[2])?[1,.84,.58]:[.75,.85,1]));Sz.push(1.0);}
       const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('aColor',new THREE.Float32BufferAttribute(Cc,3));g.setAttribute('aSize',new THREE.Float32BufferAttribute(Sz,1));
