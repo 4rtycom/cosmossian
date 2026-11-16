@@ -2557,14 +2557,18 @@ const CRAFT_INFO={
   bepicolombo:['BepiColombo','ESA · JAXA','20 October 2018','Two orbiters travelling together to Mercury.','#ffc0a0'],
   solarorbiter:['Solar Orbiter','ESA · NASA','10 February 2020','Studies the Sun from close by and is the first to image its poles.','#ffcf7a'],
   hera:['Hera','ESA','7 October 2024','Travelling to the asteroid pair Didymos and Dimorphos to study the crater left by NASA’s DART impact.','#d7c2ff']};
-const CRAFT=(()=>{const D=jsonBlock('craft');const list=[];if(!D||!D.craft)return {list,update(){},D:null};
+// NASA's own 3D models (NASA 3D Resources, public domain), fetched when a spacecraft is selected. aim: the model's axis that is kept
+// turned to the Sun (dish towards home, heat shield and sunshield towards the Sun); MR: half the model's size in scene units.
+const CRAFT_MODEL={voyager1:{f:'voyager',aim:[0,1,0]},voyager2:{f:'voyager',aim:[0,1,0]},jwst:{f:'jwst',aim:[0,-1,0]},juno:{f:'juno',aim:[0,1,0]},parker:{f:'parker',aim:[0,0,-1]}};
+const CRAFT_MR=0.01;
+const CRAFT=(()=>{const D=jsonBlock('craft');const list=[];if(!D||!D.craft)return {list,update(){},tick(){},loadModel(){},D:null};
   const _p=new V3(),_s=new V3();
   D.craft.forEach(c=>{const I=CRAFT_INFO[c.k];if(!I)return;const n=c.p.length/3;
     const o=new THREE.Object3D();solar.add(o);
     const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:TEX_GLOW,color:new THREE.Color(I[4]),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:false}));sp.scale.set(0.012,0.012,1);o.add(sp);
-    const it={key:c.k,name:I[0],I,n,c,o,sp,au:new V3(),ok:false};
+    const it={key:c.k,name:I[0],I,n,c,o,sp,au:new V3(),ok:false,M:CRAFT_MODEL[c.k]||null,m:null,ms:0};
     // what the camera needs to orbit it like a body
-    it.F={key:'craft:'+c.k,kind:'craft',name:I[0],pivot:o,tilt:o,spin:0,R:0.02,Rkm:1,parent:null,moons:[],hit:sp};
+    it.F={key:'craft:'+c.k,kind:'craft',name:I[0],pivot:o,tilt:o,spin:0,R:it.M?CRAFT_MR:0.02,Rkm:1,parent:null,moons:[],hit:sp};
     it.L=addLabel(I[0],o,'moon',()=>tier==='solar'&&active==='sol'&&!CK.on&&it.ok,'','spacecraft');it.L.pick={type:'craft',key:c.k};
     list.push(it);});
   const P=(it,i)=>_s.set(it.c.p[i*3],it.c.p[i*3+1],it.c.p[i*3+2]);
@@ -2574,14 +2578,32 @@ const CRAFT=(()=>{const D=jsonBlock('craft');const list=[];if(!D||!D.craft)retur
     out.set(0,0,0).addScaledVector(a,-0.5*t3+t2-0.5*t).addScaledVector(b,1.5*t3-2.5*t2+1).addScaledVector(c2,-1.5*t3+2*t2+0.5*t).addScaledVector(d,0.5*t3-0.5*t2);return true;}
   // planets are drawn far larger than true scale, so a craft close to one (Juno at Jupiter, JWST beyond Earth) is drawn just outside
   // that planet's globe, in its true direction from the planet
-  function update(jd){list.forEach(it=>{it.ok=at(it,jd,it.au);it.o.visible=it.ok&&solar.visible&&!TV.on&&LF.spacecraft!==false; // the glowing markers belong to the Spacecraft layerif(!it.ok)return;
+  function update(jd){list.forEach(it=>{it.ok=at(it,jd,it.au);it.o.visible=it.ok&&solar.visible&&!TV.on&&LF.spacecraft!==false;if(!it.ok)return; // the glowing markers belong to the Spacecraft layer
     let near=null,best=0.05;planetList.forEach(pl=>{if(!pl.h)return;const d=Math.hypot(it.au.x-pl.h.x,it.au.y-pl.h.y,it.au.z-pl.h.z);if(d<best){best=d;near=pl;}});
     if(near){_p.set(it.au.x-near.h.x,it.au.z-near.h.z,-(it.au.y-near.h.y));if(_p.lengthSq()<1e-18)_p.copy(near.pivot.position);_p.normalize().multiplyScalar(near.R*(near.key==='earth'?5:2.4));it.o.position.copy(near.pivot.position).add(_p);}
-    else distMap(it.au.x,it.au.y,it.au.z,it.o.position);});}
-  return {list,update,at,D};})();
+    else distMap(it.au.x,it.au.y,it.au.z,it.o.position);
+    if(it.m){_p.copy(it.o.position).negate();if(_p.lengthSq()>1e-12)it.m.quaternion.setFromUnitVectors(_s.fromArray(it.M.aim),_p.normalize());}});}
+  const script=src=>new Promise((res,rej)=>{if(document.querySelector('script[data-src="'+src+'"]'))return res();const e=document.createElement('script');e.dataset.src=src;e.src=src;e.onload=res;e.onerror=()=>rej(new Error(src));document.head.appendChild(e);});
+  function loadModel(it){if(!it.M||it.ms)return;it.ms=1;toast('Loading NASA\u2019s 3D model of '+it.name+'\u2026',60000);
+    const fail=()=>{it.ms=0;toast('The 3D model of '+it.name+' could not be loaded.',3200);};
+    script('lib/three/GLTFLoader.js').then(()=>script('lib/three/DRACOLoader.js')).then(()=>{
+      const dl=new THREE.DRACOLoader();dl.setDecoderPath('lib/draco/');const gl=new THREE.GLTFLoader();gl.setDRACOLoader(dl);
+      gl.load('models/craft/'+it.M.f+'.glb',gltf=>{
+        const root=gltf.scene,box=new THREE.Box3().setFromObject(root),size=box.getSize(new V3()),c=box.getCenter(new V3());
+        root.position.sub(c);const k=new THREE.Group();k.add(root);k.scale.setScalar(2*CRAFT_MR/Math.max(size.x,size.y,size.z));
+        const w=new THREE.Group();w.add(k);
+        root.traverse(o=>{if(o.isMesh&&o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(m.map)m.map.anisotropy=renderer.capabilities.getMaxAnisotropy();});}});
+        w.visible=false;it.o.add(w);it.m=w;it.ms=2;dl.dispose();toast(it.name+': NASA 3D model',2400);
+      },undefined,fail);}).catch(fail);}
+  // the model takes over from the glowing marker once it is big enough on screen to see
+  const _q=new V3();
+  function tick(){for(const it of list){if(!it.m)continue;it.o.getWorldPosition(_q);const d=camera.position.distanceTo(_q);
+    const px=d>0?CRAFT_MR/d/Math.tan(camera.fov*Math.PI/360)*(renderer.domElement.clientHeight||innerHeight)/2:1e9;
+    const show=px>10&&it.o.visible;if(it.m.visible!==show){it.m.visible=show;it.sp.visible=!show;}}}
+  return {list,update,at,tick,loadModel,D};})();
 function flyToCraft(k){const it=CRAFT.list.find(x=>x.key===k);if(!it)return;if(CK.on){toast('Leave the cockpit to fly to '+it.name,3000);return;}
   select({type:'craft',key:k});if(!it.ok){toast('No position for '+it.name+' at this date',3000);return;}
-  tier='solar';focusBody(it.F,{ground:false,alt:2.2,dur:2.4});C.minAlt=0.03;C.maxAlt=400;applyTierUI();}
+  tier='solar';if(it.M){CRAFT.loadModel(it);focusBody(it.F,{ground:false,alt:CRAFT_MR*2.4,dur:2.6});C.minAlt=CRAFT_MR*0.3;}else{focusBody(it.F,{ground:false,alt:2.2,dur:2.4});C.minAlt=0.03;}C.maxAlt=400;applyTierUI();}
 function flyToISS(){
   if(CK.on){toast('Leave the cockpit to visit the ISS',3000);return;}
   ISS.load();select({type:'iss',key:'iss'});tier='surface';
@@ -2931,7 +2953,7 @@ function teleMore(s){const el=$('#tMore');if(!el)return;let rows=[],extra='';
   if(s.type==='star'||s.type==='cat'){const I=starInfo(s.key);if(I){rows=starRows(I.o);const sd=starDisc(s.key,I.o);if(sd)rows.push(['Discovered',sd]);extra=planetTable(s.key,I.pl);}}
   else if(s.type==='hyg'||s.type==='dso'||s.type==='con'){rows=skyRows(s);}
   else if(s.type==='sb'&&SB[s.key]){const o=SB[s.key];if(o[11])rows.push(['Discovered',o[11]+(o[10]?' · '+o[10]:'')]);}
-  else if(s.type==='craft'){const it=CRAFT.list.find(x=>x.key===s.key);rows=[['Agency',it.I[1]],['Launched',it.I[2]],['Position','JPL Horizons, updated daily'+(CRAFT.D&&CRAFT.D.date?' ('+CRAFT.D.date+')':'')]];}
+  else if(s.type==='craft'){const it=CRAFT.list.find(x=>x.key===s.key);rows=[['Agency',it.I[1]],['Launched',it.I[2]],['Position','JPL Horizons, updated daily'+(CRAFT.D&&CRAFT.D.date?' ('+CRAFT.D.date+')':'')]];if(it.M)rows.push(['3D model','NASA 3D Resources']);}
   else if(s.type==='iss'){rows=[['Orbit data',ISS.EL&&ISS.EL.EPOCH?'CelesTrak, epoch '+ISS.EL.EPOCH.slice(0,16).replace('T',' ')+' UTC':'not available'],['First module','Zarya, launched 20 November 1998'],['Crewed since','2 November 2000'],['Partners','NASA, Roscosmos, ESA, JAXA, CSA'],['Orbit inclination','51.6°'],['3D model','NASA 3D Resources (public domain)']];}
   else if(s.type==='body'&&bodies[s.key]){const b=bodies[s.key];
     if(b.kind==='star'&&!b.comp){const I=starInfo(b===SUN?'Sun':b.name);if(I){rows=starRows(I.o);const sd=starDisc(b.name,I.o);if(sd&&b!==SUN)rows.push(['Discovered',sd]);if(b!==SUN)extra=planetTable(b.name,I.pl);}
@@ -4278,7 +4300,7 @@ function frame(now){
   requestAnimationFrame(frame);
   const dt=Math.min(0.1,(now-last)/1000);last=now;
   if(WARM.state===1||(window.__intro&&(WARM.state<2||(frame.held=(frame.held||0)+1)>12)))return; // explorer waits behind the entrance screen, and draws its first frames only once the shaders are ready
-  REAL.tick(now);ISS.tick();
+  REAL.tick(now);ISS.tick();CRAFT.tick();
   updateBodies(dt);
   updateTrueScale();
   updateLayers(dt);
