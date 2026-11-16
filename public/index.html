@@ -1362,10 +1362,58 @@ const TEX_BH=(()=>{const W=256,c=document.createElement('canvas');c.width=c.heig
   for(let i=0;i<48;i++){const a0=i/48*TAU,a1=(i+1)/48*TAU+0.01;const k=0.35+0.65*Math.pow(0.5+0.5*Math.cos(a0-Math.PI),2);
     g.beginPath();g.arc(m,m,W*0.165,a0,a1);g.strokeStyle=`rgba(255,${200+40*k|0},${150+70*k|0},${0.25+0.75*k})`;g.lineWidth=W*0.022;g.stroke();}
   return new THREE.CanvasTexture(c);})();
+// Marker pictures, painted once per kind: a black hole with a tilted, Doppler-brightened accretion disk and the lensed arc of its far side,
+// stars with diffraction spikes, supernova shells, nebula clouds, clusters and pulsar beams.
+const MARK_TEX={};
+function markTex(type){if(MARK_TEX[type])return MARK_TEX[type];
+  const W=256,c=document.createElement('canvas');c.width=c.height=W;const g=c.getContext('2d'),m=W/2;let sd=type.length*7919;const R=()=>(sd=(sd*9301+49297)%233280)/233280;
+  const glow=(x,y,r,col,a)=>{const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,`rgba(${col},${a})`);gr.addColorStop(.35,`rgba(${col},${a*.28})`);gr.addColorStop(1,`rgba(${col},0)`);g.fillStyle=gr;g.fillRect(x-r,y-r,2*r,2*r);};
+  const spike=(ang,len,wd,col,a)=>{g.save();g.translate(m,m);g.rotate(ang);const gr=g.createLinearGradient(-len,0,len,0);gr.addColorStop(0,`rgba(${col},0)`);gr.addColorStop(.5,`rgba(${col},${a})`);gr.addColorStop(1,`rgba(${col},0)`);g.fillStyle=gr;g.fillRect(-len,-wd/2,2*len,wd);g.restore();};
+  g.globalCompositeOperation='lighter';
+  if(type==='bh'){
+    g.globalCompositeOperation='source-over';
+    glow(m,m,118,'255,150,60',.22);
+    // disk: bright inner edge to dim outer edge, flattened, with the approaching side (left) far brighter
+    const disk=document.createElement('canvas');disk.width=disk.height=W;const d=disk.getContext('2d');
+    d.translate(m,m);d.scale(1,.2);const gr=d.createRadialGradient(0,0,36,0,0,112);gr.addColorStop(0,'rgba(255,248,225,1)');gr.addColorStop(.18,'rgba(255,196,110,.95)');gr.addColorStop(.55,'rgba(230,110,40,.55)');gr.addColorStop(1,'rgba(150,50,20,0)');
+    d.fillStyle=gr;d.beginPath();d.arc(0,0,112,0,TAU);d.arc(0,0,36,0,TAU,true);d.fill();
+    d.setTransform(1,0,0,1,0,0);d.globalCompositeOperation='destination-in';const bm=d.createLinearGradient(0,0,W,0);bm.addColorStop(0,'rgba(0,0,0,1)');bm.addColorStop(.5,'rgba(0,0,0,.8)');bm.addColorStop(1,'rgba(0,0,0,.2)');d.fillStyle=bm;d.fillRect(0,0,W,W);
+    // far half of the disk (behind the hole)
+    g.save();g.beginPath();g.rect(0,0,W,m);g.clip();g.drawImage(disk,0,0);g.restore();
+    // the hole's shadow
+    g.fillStyle='#000';g.beginPath();g.arc(m,m,37,0,TAU);g.fill();
+    // gravitational lensing bends the far side of the disk over the top (and a faint copy under the bottom)
+    g.globalCompositeOperation='lighter';
+    const lens=(r,wd,a,sy)=>{const lg=g.createRadialGradient(m,m,r-wd,m,m,r+wd);lg.addColorStop(0,'rgba(255,230,170,0)');lg.addColorStop(.5,`rgba(255,215,150,${a})`);lg.addColorStop(1,'rgba(230,120,50,0)');g.save();g.beginPath();g.rect(0,sy?m:0,W,m);g.clip();g.fillStyle=lg;g.beginPath();g.arc(m,m,r+wd,0,TAU);g.fill();g.restore();};
+    lens(46,14,.85,0);lens(42,8,.35,1);
+    // near half of the disk crosses in front of the shadow
+    g.save();g.beginPath();g.rect(0,m,W,m);g.clip();g.drawImage(disk,0,0);g.restore();
+    g.strokeStyle='rgba(255,246,220,.55)';g.lineWidth=1.4;g.beginPath();g.arc(m,m,39,0,TAU);g.stroke();
+  }else if(type==='snr'){
+    glow(m,m,120,'255,90,170',.18);
+    for(let k=0;k<70;k++){const a=R()*TAU,r=62+R()*28,l=.25+R()*.6;g.strokeStyle=`rgba(${R()<.5?'255,110,200':'110,200,255'},${.08+R()*.22})`;g.lineWidth=1+R()*2.4;g.beginPath();g.arc(m,m,r,a,a+l);g.stroke();}
+    for(let k=0;k<26;k++){const a=R()*TAU,r=40+R()*52;glow(m+Math.cos(a)*r,m+Math.sin(a)*r,16+R()*16,R()<.5?'255,120,190':'130,200,255',.16);}
+    glow(m,m,12,'200,230,255',.9);
+  }else if(type==='neb'){
+    for(let k=0;k<26;k++){const a=R()*TAU,r=R()*58;const cr=R();glow(m+Math.cos(a)*r,m+Math.sin(a)*r,34+R()*44,cr<.55?'255,90,130':cr<.8?'255,150,120':'110,170,255',.1+R()*.14);}
+    for(let k=0;k<7;k++){const a=R()*TAU,r=R()*40;glow(m+Math.cos(a)*r,m+Math.sin(a)*r,9,'255,255,255',.9);}
+  }else if(type==='gc'){
+    glow(m,m,70,'255,215,140',.35);for(let k=0;k<260;k++){const a=R()*TAU,r=62*Math.pow(R(),1.8);glow(m+Math.cos(a)*r,m+Math.sin(a)*r,3+R()*3,R()<.7?'255,225,170':'255,255,255',.55);}
+    glow(m,m,18,'255,240,200',.7);
+  }else if(type==='pulsar'){
+    glow(m,m,70,'120,220,255',.3);spike(-.9,126,3,'150,230,255',.75);spike(-.9,126,12,'120,210,255',.18);glow(m,m,22,'220,245,255',.95);spike(0,60,2,'230,248,255',.5);spike(Math.PI/2,60,2,'230,248,255',.5);
+  }else if(type==='burst'){
+    for(let k=1;k<=4;k++){g.strokeStyle=`rgba(190,150,255,${.55/k})`;g.lineWidth=3.5-k*.5;g.beginPath();g.arc(m,m,k*24,0,TAU);g.stroke();}glow(m,m,50,'200,170,255',.5);glow(m,m,12,'255,255,255',.95);
+  }else if(type==='quasar'){
+    glow(m,m,96,'180,215,255',.3);spike(Math.PI/2,124,5,'190,225,255',.7);spike(Math.PI/2,124,16,'150,200,255',.14);glow(m,m,24,'255,255,255',.95);
+  }else{ // plain star
+    glow(m,m,110,'170,200,255',.2);glow(m,m,40,'235,243,255',.55);spike(0,126,3.2,'255,255,255',.8);spike(Math.PI/2,126,3.2,'255,255,255',.8);spike(Math.PI/4,60,1.6,'255,255,255',.28);spike(-Math.PI/4,60,1.6,'255,255,255',.28);glow(m,m,15,'255,255,255',1);
+  }
+  const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.anisotropy=4;return MARK_TEX[type]=t;}
 function markerSprite(kind,scale){
   const bh=/black hole/i.test(kind);
-  const col=/supernova|remnant/i.test(kind)?'#ff7ad9':/nebula/i.test(kind)?'#ff8fb0':/cluster/i.test(kind)?'#ffd27a':/pulsar|magnetar/i.test(kind)?'#7fe3ff':/merger|burst|wave|kilonova/i.test(kind)?'#b28cff':/quasar/i.test(kind)?'#bfe0ff':'#cfe0ff';
-  const sp=new THREE.Sprite(bh?new THREE.SpriteMaterial({map:TEX_BH,transparent:true,depthWrite:false}):spriteMat(TEX_GLOW,col,1));sp.scale.set(scale,scale,1);return sp;}
+  const type=bh?'bh':/supernova|remnant/i.test(kind)?'snr':/nebula/i.test(kind)?'neb':/cluster/i.test(kind)?'gc':/pulsar|magnetar/i.test(kind)?'pulsar':/merger|burst|wave|kilonova/i.test(kind)?'burst':/quasar/i.test(kind)?'quasar':'star';
+  const sp=new THREE.Sprite(bh?new THREE.SpriteMaterial({map:markTex('bh'),transparent:true,depthWrite:false}):new THREE.SpriteMaterial({map:markTex(type),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));sp.scale.set(scale,scale,1);return sp;}
 // fixed on-screen size icon (does not balloon when you fly close)
 function iconSprite(kind,px){const sp=markerSprite(kind,1);sp.material.sizeAttenuation=false;sp.scale.set(px,px,1);sp.layers.set(1);return sp;}
 function spriteMat(tex,color,opacity=1){return new THREE.SpriteMaterial({map:tex,color:new THREE.Color(color),transparent:true,opacity,blending:THREE.AdditiveBlending,depthWrite:false});}
@@ -1533,16 +1581,62 @@ vec2 d=gl_PointCoord-0.5;float r2=dot(d,d)*4.;float a=${soft?'exp(-r2*3.2)*(1.-r
    addPts(P,Cc,Sz,galMat(2.4,false,0.9));}
   // dust lanes: thin, dark, hugging the inner (concave) edge of each arm, plus a ring around the bar
   {const P=[],Cc=[],Sz=[];
-   for(let i=0;i<14000;i++){const A=arms[i%4];const r=r0+460*Math.pow(Math.random(),0.8),th=Math.log(r/r0)/b+A.off,rr=r-(4+r*0.035)+gauss()*(2+r*0.012);
-     const x=rr*Math.cos(th),z=rr*Math.sin(th);P.push(x,gauss()*(0.9+Math.max(0,r-320)*0.01)+warpY(x,z),z);Cc.push(0.55+Math.random()*0.45,0,0);Sz.push(7+Math.random()*9);}
-   for(let i=0;i<900;i++){const a=Math.random()*TAU,r=62+gauss()*6;P.push(r*Math.cos(a)*1.2,gauss()*0.6,r*Math.sin(a));Cc.push(0.3,0,0);Sz.push(5+Math.random()*5);}
+   for(let i=0;i<5000;i++){const A=arms[i%4];const r=120+380*Math.pow(Math.random(),0.8),th=Math.log(r/r0)/b+A.off,rr=r-(4+r*0.035)+gauss()*(2+r*0.012);
+     const x=rr*Math.cos(th),z=rr*Math.sin(th);P.push(x,gauss()*(0.9+Math.max(0,r-320)*0.01)+warpY(x,z),z);Cc.push(0.4+Math.random()*0.4,0,0);Sz.push(3+Math.random()*4);}
    // feathered spurs: thin dark filaments that branch off the lanes across the arms
    for(let sp=0;sp<260;sp++){const A=arms[sp%4];const r=r0+50+410*Math.pow(Math.random(),0.85),th=Math.log(r/r0)/b+A.off,rr=r-(4+r*0.035);
      let x=rr*Math.cos(th),z=rr*Math.sin(th),dir=th+0.55+Math.random()*0.5;const len=14+Math.random()*40,st=0.6+r*0.002;
      for(let j=0;j<len;j++){dir+=gauss()*0.08;x+=Math.cos(dir)*st;z+=Math.sin(dir)*st;const f=1-j/len;P.push(x+gauss()*0.3,gauss()*0.5+warpY(x,z),z+gauss()*0.3);Cc.push((0.35+Math.random()*0.4)*f+0.1,0,0);Sz.push(2+Math.random()*3);}}
    const dp=addPts(P,Cc,Sz,dustMat(90,0.26,MWR));dp.renderOrder=5;}
-  const bulge=new THREE.Sprite(spriteMat(TEX_GLOW,'#ffb35c',.35));bulge.scale.set(220,220,1);galaxy.add(bulge);
-  const sgr=iconSprite('black hole',0.05);sgr.userData.pick={type:'gal',key:'sgra'};galaxy.add(sgr);GAL.sgr=sgr;
+  // the diffuse light of the unresolved stars: one smooth sheet that carries the bulge, bar, arms, dust lanes and star-forming knots,
+  // so the galaxy reads as a continuous glowing disk (as in a long exposure) and the particles above only add the sparkle
+  {const offs=arms.map(A=>A.off),ws=arms.map(A=>A.w/0.3);
+   const dm=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,
+    uniforms:Object.assign({uExp:G_EXP,uOff:{value:offs},uW:{value:ws},uBar:{value:barAng},uB:{value:b},uGain:{value:1}},rotU(MWR)),
+    vertexShader:`varying vec2 vP;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main(){vP=position.xz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);
+#include <logdepthbuf_vertex>
+}`,
+    fragmentShader:`varying vec2 vP;uniform float uTime,uSpin,uRref,uRcore,uExp,uBar,uB,uGain;uniform float uOff[4],uW[4];
+#include <logdepthbuf_pars_fragment>
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*vn(p);p=p*2.03+vec2(17.3,9.1);a*=.5;}return s;}
+void main(){
+#include <logdepthbuf_fragment>
+float r=length(vP);if(r>560.)discard;
+float ang=uTime*uSpin*mix(1.,uRref/max(r,uRcore),.3);float th=atan(vP.y,vP.x)-ang;
+vec2 q=r*vec2(cos(th),sin(th));
+float arm=0.,lane=0.,spine=0.;
+for(int k=0;k<4;k++){float t=log(max(r,2.)/38.)/uB+uOff[k];float d=th-t;d-=6.2831853*floor((d+3.1415927)/6.2831853);
+  float perp=d*r*0.222;float w=9.+r*.07;float wk=uW[k];
+  arm+=wk*exp(-perp*perp/(w*w));spine+=wk*exp(-perp*perp/(w*w*.12));
+  float pl=perp-(4.+r*.035);float wl=(2.2+r*.014);lane+=exp(-pl*pl/(wl*wl))*smoothstep(55.,110.,r);}
+float n1=fbm(q*.035),n2=fbm(q*.12+3.),n3=fbm(q*.45+7.);
+float mott=.75+.5*n2;
+// bulge and bar
+float bul=exp(-pow(r/30.,.8))*.85+exp(-r/80.)*.22;
+vec2 bq=vec2(cos(uBar),sin(uBar));float al=dot(q,bq),ac=dot(q,vec2(-bq.y,bq.x));
+float bar=exp(-(al*al)/(2.*62.*62.)-(ac*ac)/(2.*17.*17.))*.55;
+float disk=exp(-r/150.);
+float out_=smoothstep(40.,340.,r);
+vec3 warm=vec3(1.,.74,.44),cool=vec3(.52,.66,1.);
+vec3 diskC=mix(vec3(1.,.82,.58),vec3(.62,.72,1.),out_);
+vec3 col=warm*(bul+bar*.9)+diskC*(disk*.42+arm*disk*1.25*mott*(.5+.5*smoothstep(25.,90.,r)));
+// star-forming knots along the arms, and a bright thread on each arm's spine
+float kn=smoothstep(.62,.9,n3)*spine*smoothstep(50.,140.,r);
+col+=vec3(1.,.42,.62)*kn*.9*disk*2.4+cool*spine*disk*.55*n3;
+// dust: lanes on the inner edge of each arm, a mottled veil over the inner disk and a dark ring round the bar
+float dust=clamp(lane*(.55+.7*n2)+smoothstep(.55,.8,n1)*.35*smoothstep(0.,60.,r)*disk*2.2+exp(-pow((r-66.)/9.,2.))*.5*smoothstep(.3,.7,n3),0.,.92);
+col*=1.-dust;
+col*=smoothstep(560.,380.,r);
+col*=uGain*uExp;
+gl_FragColor=vec4(col,1.);}`});
+   const dg=new THREE.PlaneGeometry(1120,1120);dg.rotateX(-Math.PI/2);const dsk=new THREE.Mesh(dg,dm);dsk.frustumCulled=false;dsk.renderOrder=-1;galaxy.add(dsk);GAL.disk=dsk;}
+  const bulge=new THREE.Sprite(spriteMat(TEX_GLOW,'#ffb35c',.12));bulge.scale.set(160,160,1);galaxy.add(bulge);
+  const sgr=iconSprite('black hole',0.08);sgr.userData.pick={type:'gal',key:'sgra'};galaxy.add(sgr);GAL.sgr=sgr;
   const sunPos=new V3(260*Math.cos(a0),0,260*Math.sin(a0));GAL.sunPos=sunPos;
   const sm=new THREE.Sprite(spriteMat(TEX_GLOW,'#ffaa00',1));sm.position.copy(sunPos);sm.scale.set(16,16,1);sm.userData.pick={type:'gal',key:'sun'};galaxy.add(sm);GAL.sunMarker=sm;GAL.rotItems.push({o:sm,b:sm.position.clone()});
   const ringG=new THREE.RingGeometry(9,10,64);ringG.rotateX(-Math.PI/2);
@@ -1572,7 +1666,7 @@ vec2 d=gl_PointCoord-0.5;float r2=dot(d,d)*4.;float a=${soft?'exp(-r2*3.2)*(1.-r
   [150,-150].forEach(y=>{const f=new THREE.Sprite(spriteMat(TEX_GLOW,'#8fb8ff',.05));f.scale.set(230,300,1);f.position.set(0,y,0);galaxy.add(f);});
   MWOBJ.forEach(o=>{const l=o[3]*DEG,bb=o[4]*DEG,d=o[5]/100;
     const dir=toGC.clone().multiplyScalar(Math.cos(bb)*Math.cos(l)).addScaledVector(tg,Math.cos(bb)*Math.sin(l)).add(new V3(0,Math.sin(bb),0));
-    const sp=iconSprite(o[2],/black hole/i.test(o[2])?0.038:0.026);sp.position.copy(sunPos).addScaledVector(dir,d);sp.userData.pick={type:'mwo',key:o[0]};galaxy.add(sp);GAL.objPick.push(sp);GAL.rotItems.push({o:sp,b:sp.position.clone()});
+    const sp=iconSprite(o[2],/black hole/i.test(o[2])?0.062:0.045);sp.position.copy(sunPos).addScaledVector(dir,d);sp.userData.pick={type:'mwo',key:o[0]};galaxy.add(sp);GAL.objPick.push(sp);GAL.rotItems.push({o:sp,b:sp.position.clone()});
     if(/cluster/i.test(o[2])){const P=[],Cc=[],Sz=[],n=/globular/i.test(o[2])?160:70,w=/globular/i.test(o[2])?1.1:0.6;
       for(let k=0;k<n;k++){const r=w*Math.pow(Math.random(),1.6)*2.2,ct=Math.random()*2-1,ph=Math.random()*TAU,st=Math.sqrt(1-ct*ct);P.push(r*st*Math.cos(ph),r*ct,r*st*Math.sin(ph));Cc.push(...(/globular/i.test(o[2])?[1,.84,.58]:[.75,.85,1]));Sz.push(1.0);}
       const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('aColor',new THREE.Float32BufferAttribute(Cc,3));g.setAttribute('aSize',new THREE.Float32BufferAttribute(Sz,1));
