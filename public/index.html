@@ -1506,7 +1506,7 @@ const MWOBJ=[
 const galaxy=new THREE.Group();scene.add(galaxy);
 const GAL={};
 (()=>{
-  const N=180000,pos=new Float32Array(N*3),col=new Float32Array(N*3),siz=new Float32Array(N);
+  const DENSE=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').matches,N=DENSE?650000:230000,pos=new Float32Array(N*3),col=new Float32Array(N*3),siz=new Float32Array(N);
   const b=Math.tan(13*DEG),a0=0.35,r0=38;
   const sagOff=a0-Math.log(200/r0)/b;
   const arms=[{n:'Perseus Arm',off:sagOff-Math.PI/2,w:.3},{n:'Scutum–Centaurus Arm',off:sagOff+Math.PI/2,w:.3},{n:'Sagittarius Arm',off:sagOff,w:.17},{n:'Norma Arm',off:sagOff+Math.PI,w:.17}];
@@ -1534,7 +1534,8 @@ const GAL={};
       const r=Math.min(-Math.log(1-Math.random()*0.995)*150,560),a=Math.random()*TAU;
       x=r*Math.cos(a);z=r*Math.sin(a);y=gauss()*(Math.random()<0.4?9:3.5)+warpY(x,z);c=Math.random()<0.4?[.72,.62,.5]:[.55,.58,.72];s=0.9;
     }
-    pos.set([x,y,z],i*3);const br=0.75;col.set([c[0]*br,c[1]*br,c[2]*br],i*3);siz[i]=s;
+    pos.set([x,y,z],i*3);const q=Math.random(),br=0.14+0.9*q*q*q*q; // many faint stars, a few bright ones: like a real star count
+    col.set([c[0]*br,c[1]*br,c[2]*br],i*3);siz[i]=s*(0.55+0.7*q);
   }
   galMat=(maxPx,soft,gain,rot)=>extOpts(new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:Object.assign({uPR:{value:1},uMax:{value:maxPx},uGain:{value:gain},uExp:G_EXP},rotU(rot)),
     vertexShader:`attribute vec3 aColor;attribute float aSize;uniform float uPR,uMax,uGain,uExp;varying vec3 vC;
@@ -1565,12 +1566,12 @@ vec2 d=gl_PointCoord-0.5;float r2=dot(d,d)*4.;float a=${soft?'exp(-r2*3.2)*(1.-r
        const t=sstep(0,1,r/320);c=[lerp(1,.42,t),lerp(.74,.58,t),lerp(.48,1,t)];if(Math.random()<0.05)c=[.95,.38,.55];sz=20+Math.random()*30;}
      hp.set([x,y,z],i*3);hc.set(c,i*3);hs[i]=sz;}
    const hg=new THREE.BufferGeometry();hg.setAttribute('position',new THREE.BufferAttribute(hp,3));hg.setAttribute('aColor',new THREE.BufferAttribute(hc,3));hg.setAttribute('aSize',new THREE.BufferAttribute(hs,1));
-   const hm=galMat(220,true,0.05,MWR);GAL.mats.push(hm);const hpts=new THREE.Points(hg,hm);hpts.frustumCulled=false;galaxy.add(hpts);}
+   const hm=galMat(220,true,0.028,MWR);GAL.mats.push(hm);const hpts=new THREE.Points(hg,hm);hpts.frustumCulled=false;galaxy.add(hpts);}
   {const P=[],Cc=[],Sz=[];
    for(let i=0;i<900;i++){const A=arms[i%4];const r=r0+60+420*Math.pow(Math.random(),0.9),th=Math.log(r/r0)/b+A.off,rr=r+gauss()*(3+r*0.02);
      const x=rr*Math.cos(th),z=rr*Math.sin(th);P.push(x,gauss()*1.2+warpY(x,z),z);const blue=Math.random()<0.12;Cc.push(...(blue?[0.35,0.55,1.0]:[1.0,0.28+Math.random()*0.12,0.5]));Sz.push(blue?4+Math.random()*5:5+Math.random()*11);}
    const hg=new THREE.BufferGeometry();hg.setAttribute('position',new THREE.Float32BufferAttribute(P,3));hg.setAttribute('aColor',new THREE.Float32BufferAttribute(Cc,3));hg.setAttribute('aSize',new THREE.Float32BufferAttribute(Sz,1));
-   const nm=galMat(120,true,0.16,MWR);GAL.mats.push(nm);const np=new THREE.Points(hg,nm);np.frustumCulled=false;galaxy.add(np);}
+   const nm=galMat(120,true,0.09,MWR);GAL.mats.push(nm);const np=new THREE.Points(hg,nm);np.frustumCulled=false;galaxy.add(np);}
   const addPts=(P,Cc,Sz,m)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(P,3));g.setAttribute('aColor',new THREE.Float32BufferAttribute(Cc,3));g.setAttribute('aSize',new THREE.Float32BufferAttribute(Sz,1));
     GAL.mats.push(m);const pts=new THREE.Points(g,m);pts.frustumCulled=false;galaxy.add(pts);return pts;};
   // stellar halo + ~150 globular clusters (spherical, extends far above and below the disk)
@@ -1592,7 +1593,7 @@ vec2 d=gl_PointCoord-0.5;float r2=dot(d,d)*4.;float a=${soft?'exp(-r2*3.2)*(1.-r
   // so the galaxy reads as a continuous glowing disk (as in a long exposure) and the particles above only add the sparkle
   {const offs=arms.map(A=>A.off),ws=arms.map(A=>A.w/0.3);
    const dm=new THREE.ShaderMaterial({transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,
-    uniforms:Object.assign({uExp:G_EXP,uOff:{value:offs},uW:{value:ws},uBar:{value:barAng},uB:{value:b},uGain:{value:1}},rotU(MWR)),
+    uniforms:Object.assign({uExp:G_EXP,uOff:{value:offs},uW:{value:ws},uBar:{value:barAng},uB:{value:b},uGain:{value:0.42}},rotU(MWR)),
     vertexShader:`varying vec2 vP;
 #include <common>
 #include <logdepthbuf_pars_vertex>
@@ -1808,19 +1809,20 @@ CLUSTERS.forEach((c,i)=>{
 });
 await yieldUI();
 // illustrative cosmic web: filaments between random nodes, outside the local volume
-(()=>{const R=rng(99),gs=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*v);};
+(()=>{const DU=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').matches,R=rng(99),gs=()=>{let u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(TAU*v);};
   const nodes=[];while(nodes.length<300){const v=new V3(R()*2-1,R()*2-1,R()*2-1);if(v.lengthSq()>1)continue;v.multiplyScalar(940);if(v.length()<130)continue;nodes.push(v);}
   const edges=[];nodes.forEach((a,i)=>{const best=[[1/0,-1],[1/0,-1],[1/0,-1]]; // the 3 nearest other nodes, found in one pass
     nodes.forEach((b,j)=>{if(j===i)return;const d=a.distanceToSquared(b);if(d<best[2][0]){best[2]=[d,j];best.sort((x,y)=>x[0]-y[0]);}});
     for(let k=0;k<3;k++){const j=best[k][1];if(j>i)edges.push([i,j]);}});
   const P=[],Cc=[],Sz=[],HP=[],HC=[],HS=[];
-  edges.forEach(([i,j])=>{const a=nodes[i],b=nodes[j],L=a.distanceTo(b),n=Math.round(L*1.6);
-    for(let k=0;k<n;k++){const t=R(),w=4+L*0.035;P.push(lerp(a.x,b.x,t)+gs()*w,lerp(a.y,b.y,t)+gs()*w,lerp(a.z,b.z,t)+gs()*w);if(R()<0.3)Cc.push(.665,.546,.42);else Cc.push(.385,.434,.7);Sz.push(0.5+R()*0.6);}
+  edges.forEach(([i,j])=>{const a=nodes[i],b=nodes[j],L=a.distanceTo(b),n=Math.round(L*(DU?4:1.6));
+    for(let k=0;k<n;k++){const t=R(),w=4+L*0.035;P.push(lerp(a.x,b.x,t)+gs()*w,lerp(a.y,b.y,t)+gs()*w,lerp(a.z,b.z,t)+gs()*w);{const q=R(),k=0.12+0.9*q*q*q;if(R()<0.3)Cc.push(.665*k,.546*k,.42*k);else Cc.push(.385*k,.434*k,.7*k);Sz.push(0.45+R()*0.6);}}
     for(let k=0;k<Math.round(L/9);k++){const t=R();HP.push(lerp(a.x,b.x,t)+gs()*8,lerp(a.y,b.y,t)+gs()*8,lerp(a.z,b.z,t)+gs()*8);HC.push(.45,.5,1);HS.push(28+R()*30);}});
-  nodes.forEach(a=>{for(let k=0;k<70;k++){P.push(a.x+gs()*7,a.y+gs()*7,a.z+gs()*7);Cc.push(1,.82,.62);Sz.push(0.6+R()*0.6);}HP.push(a.x,a.y,a.z);HC.push(1,.75,.5);HS.push(40);});
+  nodes.forEach(a=>{for(let k=0;k<(DU?260:70);k++){const rr=Math.pow(R(),1.6)*16;P.push(a.x+gs()*rr*.5,a.y+gs()*rr*.5,a.z+gs()*rr*.5);const q=R(),kk=0.2+0.8*q*q;Cc.push(1*kk,.82*kk,.62*kk);Sz.push(0.5+R()*0.7);}HP.push(a.x,a.y,a.z);HC.push(1,.75,.5);HS.push(40);});
+  for(let k=0;k<(DU?90000:20000);k++){const v=new V3(gs(),gs(),gs()).normalize().multiplyScalar(940*Math.pow(R(),0.4));if(v.length()<130)continue;P.push(v.x,v.y,v.z);const q=R(),kk=0.08+0.6*q*q*q,w=R();Cc.push((w<.2?.7:1)*kk,(w<.2?.8:.88)*kk,(w<.2?1:.72)*kk);Sz.push(0.4+R()*0.5);}
   const mk=(p,c,z,m)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(p,3));g.setAttribute('aColor',new THREE.Float32BufferAttribute(c,3));g.setAttribute('aSize',new THREE.Float32BufferAttribute(z,1));
     GAL.mats.push(m);const pts=new THREE.Points(g,m);pts.frustumCulled=false;universe.add(pts);};
-  mk(P,Cc,Sz,galMat(2.4,false,0.75));mk(HP,HC,HS,galMat(200,true,0.035));
+  mk(P,Cc,Sz,galMat(2.4,false,2.2));mk(HP,HC,HS,galMat(200,true,0.007));
   const lo=new THREE.Object3D();lo.position.copy(nodes[5]);universe.add(lo);addLabel('Cosmic web · illustrative',lo,'ring',()=>tier==='universe','','structures');
 })();
 // CMB shell
@@ -1832,7 +1834,7 @@ void main(){
  vec3 c=n<0.45?mix(vec3(.05,.12,.55),vec3(.15,.55,.95),smoothstep(.3,.45,n)):mix(vec3(.95,.8,.3),vec3(.9,.2,.15),smoothstep(.5,.65,n));
  c=mix(c,vec3(.85,.85,.6),smoothstep(.44,.47,n)*(1.-smoothstep(.49,.53,n)));
  float out_=step(1.0,length(uCamObj));
- float f=mix(0.035,0.03+0.4*pow(1.-abs(dot(p,V)),2.5),out_);
+ float f=mix(0.006,0.01+0.16*pow(1.-abs(dot(p,V)),2.5),out_);
  gl_FragColor=vec4(c*f,1.);
 }`;
 const cmb=new THREE.Mesh(new THREE.SphereGeometry(1,128,64),extOpts(new THREE.ShaderMaterial({vertexShader:VERT,fragmentShader:CMB_FRAG,side:THREE.DoubleSide,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:{uCamObj:{value:new V3()}}})));
