@@ -776,7 +776,7 @@ body.cockpit .rail{display:none}
       <li><b>Moon</b>: Lunar Reconnaissance Orbiter colour mosaic with laser-altimeter elevation (NASA, as packaged with the open-source globe.gl library).</li>
       <li><b>Mars</b>: Viking orbiter colour mosaic from the NASA 3D Resources collection.</li>
       <li><b>Cockpit</b>: the switch panels, centre-console keypads and monitor frames are photographs of Space Shuttle Columbia's flight deck (NASA Johnson Space Center, 2001, from the NASA 3D Resources collection). The window frames and glareshield around them are modelled, and the monitors show live Cosmossian data rather than Shuttle software.</li>
-      <li><b>Asteroid shapes</b>: Bennu, Eros, Itokawa, Vesta and Kleopatra are drawn from NASA 3D Resources shape models (public domain), simplified for the web. Pluto wears the New Horizons map; Ceres, Eris, Haumea, Makemake and the other dwarf planets are drawn as globes in their known colours (their true surfaces have never been imaged). Other small bodies stay as dots because their shape is not known.</li>
+      <li><b>Asteroid shapes</b>: Bennu, Eros, Itokawa, Vesta and Kleopatra are drawn from NASA 3D Resources shape models (public domain), simplified for the web. Pluto wears the New Horizons map and is joined by Charon (true sizes, drawn closer than they really are); Ceres, Eris, Haumea, Makemake and the other dwarf planets are drawn as globes in their known colours (their true surfaces have never been imaged). Other small bodies stay as dots because their shape is not known.</li>
       <li><b>Other planets and moons</b>: Io, Europa, Ganymede, Callisto, Phobos, Deimos, Titania, Oberon and the Venus radar surface are spacecraft mosaics from the NASA 3D Resources collection (Galileo, Voyager, Viking, Magellan). Mercury, Venus’s cloud tops, Uranus, Enceladus and Triton are spacecraft-based maps distributed with the Stellarium planetarium (Oleg Pluton, CC BY 4.0; NASA/JPL and the Cassini imaging team). Where a spacecraft never photographed part of a moon (Callisto, Titania, Oberon), that part is generated. Titan stays generated because its haze hides the surface. Jupiter, Saturn and Neptune use 4,096-pixel true-colour maps by Askaniy Anpilogov, built from NASA/JPL-Caltech, Cassini, Juno and Voyager data and Björn Jónsson’s mosaics (CC BY 3.0, as distributed with Celestia).</li>
       <li><b>Nebulae you can fly into</b>: built as glowing volumes from each nebula’s class: hydrogen glows red, oxygen teal, dust blocks light, and the hot stars inside light the gas. Colours and shapes follow the real objects (for example the Ring’s shell, the Eagle’s pillars, the Veil’s filaments), but the 3D structure is a physical model, not a photograph or a measured map.</li>
       <li><b>The sky</b>: 15,696 real stars down to magnitude 7, with distances, colours and Hipparcos / Henry Draper numbers, from the HYG database v4.1 (David Nash, astronexus; CC BY-SA 4.0). Each star is placed in three dimensions, so the sky seen from another star’s system is redrawn from there. In this app the sky’s equator is laid along the plane of the planets’ orbits; in reality the two are tilted by 23.4°.</li>
@@ -2382,7 +2382,7 @@ function sbTele(i){const o=SB[i],e=o[3],a=e<1?o[2]/(1-e):0,P=a?Math.pow(a,1.5):0
     [o[9]?'DIAMETER':'BRIGHTNESS',o[9]?fmt(o[9]*2,o[9]<5?1:0)+' km':'H = '+o[8],o[9]?'':'absolute magnitude']]);}
 // NASA's own shape models (NASA 3D Resources, public domain) for the asteroids that spacecraft have mapped; they take over from the
 // dot when the camera comes close. Everything else keeps its dot (nothing is known of its true shape).
-const SB_DWARF=[[/ Pluto$/,{tex:'tex/pluto.jpg'}],[/ Ceres$/,{col:[.46,.43,.40],cr:1}],[/ Eris$/,{col:[.88,.88,.86]}],[/ Haumea$/,{col:[.92,.92,.95],sc:[1,.72,.5]}],[/ Makemake$/,{col:[.72,.45,.34]}],
+const SB_DWARF=[[/ Pluto$/,{tex:'tex/pluto.jpg',moon:'tex/charon.jpg'}],[/ Ceres$/,{col:[.46,.43,.40],cr:1}],[/ Eris$/,{col:[.88,.88,.86]}],[/ Haumea$/,{col:[.92,.92,.95],sc:[1,.72,.5]}],[/ Makemake$/,{col:[.72,.45,.34]}],
   [/ Gonggong$/,{col:[.58,.28,.22]}],[/ Quaoar$/,{col:[.58,.34,.26]}],[/ Sedna$/,{col:[.62,.22,.15]}],[/ Orcus$/,{col:[.55,.55,.57],cr:1}],[/ (Salacia|Varda|Varuna|Huya|2002 MS4|2002 UX25|2003 AZ84|G!kun\|\|'homdima)$/,{col:[.48,.38,.34]}]];
 const SB_MODEL=[[/^101955 /,'bennu'],[/^433 /,'eros'],[/^25143 /,'itokawa'],[/^4 /,'vesta'],[/^216 /,'kleopatra']],SB_MR=0.01;
 const SBM=(()=>{const map={},list=[];
@@ -2398,7 +2398,9 @@ const SBM=(()=>{const map={},list=[];
     const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;return t;}
   function loadSphere(it){it.ms=1;const d=it.dw,sc=d.sc||[1,1,1];
     const mk=tex=>{const m=new THREE.Mesh(new THREE.SphereGeometry(SB_MR,96,48),new THREE.MeshStandardMaterial({map:tex,roughness:.95,metalness:0}));m.scale.set(...sc);
-      const w=new THREE.Group();w.add(m);w.visible=false;it.a.add(w);it.m=w;it.ms=2;};
+      const w=new THREE.Group();w.add(m);w.visible=false;it.a.add(w);it.m=w;it.spin=m;it.ms=2;
+      // Pluto's companion Charon: true size ratio and period, drawn closer than its true distance (16.5 Pluto radii) so both fit in view
+      if(d.moon)new THREE.TextureLoader().load(d.moon,t=>{t.encoding=THREE.sRGBEncoding;const ch=new THREE.Group(),c=new THREE.Mesh(new THREE.SphereGeometry(SB_MR*.51,64,32),new THREE.MeshStandardMaterial({map:t,roughness:.95,metalness:0}));c.position.x=SB_MR*5.2;ch.add(c);w.add(ch);it.ch=ch;});}
     if(d.tex){toast('Loading NASA\u2019s map of '+it.name+'\u2026',60000);new THREE.TextureLoader().load(d.tex,t=>{t.encoding=THREE.sRGBEncoding;t.anisotropy=renderer.capabilities.getMaxAnisotropy();mk(t);toast(it.name+': New Horizons map',2400);},undefined,()=>{mk(paint({col:[.75,.6,.5]},it.i));});}
     else mk(paint(d,it.i));}
   function load(it){if(it.ms)return;if(it.dw){loadSphere(it);return;}it.ms=1;toast('Loading NASA\u2019s shape model of '+it.name+'\u2026',60000);
@@ -2415,10 +2417,10 @@ const SBM=(()=>{const map={},list=[];
   const _q=new V3();
   function tick(now){for(const it of list){if(!it.m)continue;it.a.getWorldPosition(_q);const d=camera.position.distanceTo(_q);
     const px=d>0?SB_MR/d/Math.tan(camera.fov*Math.PI/360)*(renderer.domElement.clientHeight||innerHeight)/2:1e9;
-    it.m.visible=px>6&&sbPts.visible;it.m.rotation.y=now*0.00006;}}
+    it.m.visible=px>6&&sbPts.visible;if(it.ch){it.ch.rotation.y=-simJD*TAU/6.3872;it.spin.rotation.y=it.ch.rotation.y;}else(it.spin||it.m).rotation.y=now*0.00006;}}
   return{map,list,load,tick};})();
 function selectSB(i){select({type:'sb',key:i});sbOrbitLine(SB[i]);
-  {const it=SBM.map[i];if(it&&!CK.on&&!TS&&sbPts.visible&&(tier==='solar')&&active==='sol'){SBM.load(it);focusBody(it.F,{ground:false,alt:SB_MR*4.6,dur:2.6});C.minAlt=SB_MR*0.3;C.maxAlt=400;applyTierUI();return;}}
+  {const it=SBM.map[i];if(it&&!CK.on&&!TS&&sbPts.visible&&(tier==='solar')&&active==='sol'){SBM.load(it);focusBody(it.F,{ground:false,alt:SB_MR*(it.dw&&it.dw.moon?10:4.6),dur:2.6});C.minAlt=SB_MR*0.3;C.maxAlt=400;applyTierUI();return;}}
   if(!CK.on&&tier==='solar'&&(C.focus===SUN||!C.focus)){sbPos(SB[i],simJD,_sbv);const rd=9*Math.pow(Math.max(_sbv.length(),0.05),0.6);C.gAlt=clamp(rd*1.9,25,300);}}
 
 /* ---------- meteor showers: where Earth crosses each dust stream ---------- */
