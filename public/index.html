@@ -344,6 +344,7 @@ body.cockpit #hint{display:none}
 html.stream .ckbar,html.stream #toast,html.stream #hudShow,html.stream #tvExit,html.stream .ckhelp,html.stream #ckHelp,html.stream #lblPanel,html.stream #ckExit,html.stream #ckCtl{display:none!important}
 html.stream,html.stream *{cursor:none!important}
 html.stream body.cockpit .leftcol,html.stream body.cockpit .dock,html.stream body.cockpit .rail{opacity:0!important;visibility:hidden!important}
+#ckHeat{position:fixed;inset:0;z-index:5;pointer-events:none;opacity:0;mix-blend-mode:screen;background:radial-gradient(ellipse 46% 26% at 50% 36%,rgba(255,190,110,.75),rgba(255,110,50,.5) 45%,rgba(255,70,130,.22) 75%,rgba(0,0,0,0) 100%)}
 #strmMark{position:fixed;right:28px;bottom:22px;z-index:60;font:600 15px/1 var(--mono,ui-monospace,monospace);letter-spacing:.32em;color:rgba(255,255,255,.62);text-shadow:0 1px 8px rgba(0,0,0,.8);pointer-events:none}
 #strmMark small{display:block;margin-top:7px;font-size:11px;letter-spacing:.24em;color:rgba(150,220,255,.75)}
 body.cockpit #strmMark{bottom:auto;top:22px}
@@ -3852,7 +3853,13 @@ function gmOf(b){if(b.gm)return b.gm;let g;
   else{const Re=b.Re||1,Me=Re<1.23?Math.pow(Re,3.58):Re<11?2.04*Math.pow(Re/1.23,1.7):318;g=398600.44*Me;}    // mass estimated from radius
   b.gm=g;return g;}
 const TW=[1,10,100,1000,1e4,1e5];
-const PH={p0:new Map(),hmax:1e9,active:false,vD:new V3(),landedOn:null};
+const PH={p0:new Map(),hmax:1e9,active:false,vD:new V3(),landedOn:null,heat:0,rho:0,dragA:0,gload:0,impact:0};
+/* Atmospheres: density at the surface (kg/m³; for gas giants at the 1-bar level), scale height (km), and where it fades to nothing (km).
+   The ship has a ballistic coefficient of 400 kg/m² (a large capsule): drag = ρv²/2β. Heating at the nose follows Sutton–Graves. */
+const ATM={earth:[1.225,8.5,140],mars:[0.020,11.1,120],venus:[65,15.9,250],titan:[5.3,40,600],jupiter:[0.16,27,1000],saturn:[0.19,59.5,1500],uranus:[0.42,27.7,800],neptune:[0.45,19.7,700]};
+const GAS={jupiter:1,saturn:1,uranus:1,neptune:1},SHIP_BETA=400,_ps=new V3(),_pw=new V3(),_pq=new THREE.Quaternion();
+// a body's spin (rad/s) about its true axis, in the system frame
+function spinOf(b,out){const h=b.rotH;if(!h||!b.tilt)return out.set(0,0,0);b.tilt.getWorldQuaternion(_pq);return out.set(0,1,0).applyQuaternion(_pq).multiplyScalar(TAU/(h*3600));}
 const _pa=new V3(),_pd=new V3(),_pb=new V3();
 function ckTw(dt){if(!(CK.phys&&TS&&!CK.auto))return CK.twEff=1;return CK.twEff=Math.max(1,Math.min(TW[CK.twi||0],PH.hmax*100/Math.max(dt,1e-3)));}
 function twLabel(){const b=$('#ckTw');if(b){b.querySelector('b').textContent='Time ×'+fmt(TW[CK.twi||0]);b.classList.toggle('on',(CK.twi||0)>0);}}
@@ -3868,19 +3875,51 @@ function physicsStep(dt,thr){
     v.copy(vD).addScaledVector(t,Math.sqrt(GM[D]/r));CK.pvInit=false;PH.landedOn=null;}
   // engine: 3 g at power ×1
   const aT=_pb.copy(thr).multiplyScalar(0.0294*Math.pow(10,CK.warp||0)*((CK.keys.ShiftLeft||CK.keys.ShiftRight)?4:1));
-  const acc=(sf,out)=>{out.copy(aT);for(let i=0;i<n;i++){_pd.copy(P0[i]).lerp(P1[i],sf).sub(pos);const r2=Math.max(_pd.lengthSq(),B[i].Rkm*B[i].Rkm*0.25);out.addScaledVector(_pd,GM[i]/(r2*Math.sqrt(r2)));}return out;};
+  const W=B.map(b=>ATM[b.key]?spinOf(b,new V3()):null),VB=B.map((b,i)=>P1[i].clone().sub(P0[i]).divideScalar(Math.max(dtS,1e-6)));
+  let dragNow=0,rhoNow=0,heatNow=0;
+  const acc=(sf,out,vel,h)=>{out.copy(aT);for(let i=0;i<n;i++){_pd.copy(P0[i]).lerp(P1[i],sf).sub(pos);const r2=Math.max(_pd.lengthSq(),B[i].Rkm*B[i].Rkm*0.25);out.addScaledVector(_pd,GM[i]/(r2*Math.sqrt(r2)));
+      // drag from the air, which turns with its planet
+      const A=ATM[B[i].key];if(A&&vel){const r=Math.sqrt(_pd.lengthSq()),alt=r-B[i].Rkm;if(alt<A[2]){const rho=A[0]*Math.exp(-Math.max(alt,0)/A[1])*sstep(A[2],A[2]*0.7,alt);
+        _ps.copy(_pd).negate();_pw.copy(W[i]).cross(_ps).add(VB[i]);_pw.subVectors(vel,_pw);const sp=_pw.length();if(sp>1e-9){
+        let ad=rho*sp*sp*1000/(2*SHIP_BETA);if(h)ad=Math.min(ad,sp*0.8/h);out.addScaledVector(_pw,-ad/sp);
+        if(rho>rhoNow){rhoNow=rho;dragNow=ad*1000;heatNow=1.7415e-4*Math.sqrt(rho)*Math.pow(sp*1000,3);}}}}}return out;};
+  // standing on a world: it turns, and carries you with it
+  if(PH.landedOn){const i=B.indexOf(PH.landedOn);if(i>=0){spinOf(B[i],_ps);const w=_ps.length();if(w>0){_pq.setFromAxisAngle(_ps.normalize(),w*dtS);pos.sub(P0[i]).applyQuaternion(_pq).add(P1[i]);}}}
   const steps=clamp(Math.ceil(dtS/PH.hmax),1,100),h=dtS/steps;
-  for(let k=0;k<steps;k++){acc(k/steps,_pa);v.addScaledVector(_pa,h/2);pos.addScaledVector(v,h);acc((k+1)/steps,_pa);v.addScaledVector(_pa,h/2);}
+  for(let k=0;k<steps;k++){acc(k/steps,_pa,v,h);v.addScaledVector(_pa,h/2);pos.addScaledVector(v,h);acc((k+1)/steps,_pa,v,h);v.addScaledVector(_pa,h/2);}
+  PH.rho=rhoNow;PH.dragA=dragNow;PH.heat=heatNow;
   // ground contact: the ship comes to rest on the surface instead of passing through
-  for(let i=0;i<n;i++){const d=pos.distanceTo(P1[i]),R=B[i].Rkm+0.03;if(d<R){const nrm=pos.clone().sub(P1[i]).normalize();pos.copy(P1[i]).addScaledVector(nrm,R);
-    v.copy(P1[i]).sub(P0[i]).divideScalar(Math.max(dtS,1e-6));if(PH.landedOn!==B[i]){PH.landedOn=B[i];toast(B[i].kind==='star'?'Contact with '+B[i].name:'Touchdown on '+B[i].name+': thrust up to lift off',3200);}D=i;}}
+  for(let i=0;i<n;i++){const d=pos.distanceTo(P1[i]),R=B[i].Rkm+0.03;if(d<R){const nrm=pos.clone().sub(P1[i]).normalize();
+    // how hard you hit: speed relative to the turning ground. Above 12 m/s (or into a star or a gas giant's depths) the ship is lost
+    spinOf(B[i],_ps);_pw.copy(_ps).cross(_pd.copy(nrm).multiplyScalar(B[i].Rkm)).add(VB[i]);const hit=v.clone().sub(_pw).length()*1000;
+    if(PH.landedOn!==B[i]&&(hit>12||B[i].kind==='star'||GAS[B[i].key])){PH.impact=1;
+      toast(B[i].kind==='star'?'Burned up in '+B[i].name+'. Ship restored to a safe orbit.':GAS[B[i].key]?'Crushed in the depths of '+B[i].name+'. Ship restored to a safe orbit.':'Crashed into '+B[i].name+' at '+fmt(hit,0)+' m/s. Ship restored to a safe orbit.',4200);
+      pos.copy(P1[i]).addScaledVector(nrm,B[i].Rkm*1.5+(ATM[B[i].key]?ATM[B[i].key][2]:0));CK.pvInit=true;PH.landedOn=null;break;}
+    pos.copy(P1[i]).addScaledVector(nrm,R);
+    v.copy(_pw);if(PH.landedOn!==B[i]){PH.landedOn=B[i];toast(B[i].kind==='star'?'Contact with '+B[i].name:'Touchdown on '+B[i].name+': thrust up to lift off',3200);}D=i;}}
   if(PH.landedOn&&pos.distanceTo(P1[B.indexOf(PH.landedOn)])>PH.landedOn.Rkm+1)PH.landedOn=null;
   // orbit relative to the dominant body
   D=PH.landedOn?B.indexOf(PH.landedOn):domOf();const mu=GM[D],rel=pos.clone().sub(P1[D]),rv=v.clone().sub(_pd.copy(P1[D]).sub(P0[D]).divideScalar(Math.max(dtS,1e-6))),r=rel.length(),v2=rv.lengthSq();
   const en=v2/2-mu/r,hv=rel.clone().cross(rv),ev=rv.clone().cross(hv).divideScalar(mu).sub(rel.clone().divideScalar(r)),e=ev.length(),a=Math.abs(en)>1e-12?-mu/(2*en):Infinity;
   CK.orb={name:B[D].name,v:Math.sqrt(v2),alt:r-B[D].Rkm,e,pe:a*(1-e)-B[D].Rkm,ap:e<1?a*(1+e)-B[D].Rkm:Infinity,T:e<1&&a>0?TAU*Math.sqrt(a*a*a/mu):Infinity,g:mu/(r*r),landed:!!PH.landedOn};
   PH.hmax=0.02*Math.sqrt(r*r*r/mu);
+  // what you feel: thrust and air drag push you; in free fall you float (0 g); standing on a world you feel its gravity
+  PH.gload=(PH.landedOn?mu/(r*r)*1000:aT.length()*1000+PH.dragA)/9.80665;CK.orb.heat=PH.heat;CK.orb.rho=PH.rho;CK.orb.gl=PH.gload;
+  PH.D=D;PH.mu=mu;PH.rel=rel;PH.rv=rv;PH.Dpos=P1[D];PH.DR=B[D].Rkm;
   CK.vel.copy(rv);B.forEach((b,i)=>PH.p0.get(b).copy(P1[i]));return true;}
+const PATH=(()=>{const N=360,g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));g.setDrawRange(0,0);
+  const m=new THREE.LineBasicMaterial({color:0x7fe3ff,transparent:true,opacity:.55,depthWrite:false});const L=new THREE.Line(g,m);L.frustumCulled=false;L.visible=false;scene.add(L);
+  const _e=new V3(),_hq=new V3(),_P=new V3(),_Q=new V3(),_x=new V3();
+  function update(){const on=CK.on&&PH.active&&PH.rel&&!PH.landedOn;L.visible=!!on;if(!on)return;
+    const mu=PH.mu,r=PH.rel,v=PH.rv,rl=r.length();_hq.copy(r).cross(v);const hh=_hq.length();if(hh<1e-9){L.visible=false;return;}
+    _e.copy(v).cross(_hq).divideScalar(mu).sub(_x.copy(r).divideScalar(rl));const e=_e.length(),p=hh*hh/mu;
+    if(e>1e-6)_P.copy(_e).normalize();else _P.copy(r).normalize();_Q.copy(_hq).normalize().cross(_P);
+    const nu0=Math.atan2(r.dot(_Q),r.dot(_P));const lim=e<1?Math.PI*2:Math.acos(-1/e)*0.985;
+    const a=g.attributes.position.array;let k=0;const R=PH.DR,ship=CK.posKm,O=PH.Dpos;
+    for(let j=0;j<N;j++){const nu=nu0+(e<1?TAU:(lim-Math.abs(nu0)))*j/(N-1);if(e>=1&&Math.abs(nu)>=lim)break;const rr=p/(1+e*Math.cos(nu));if(rr<R||rr>rl*60+R*20)break;
+      _x.copy(_P).multiplyScalar(Math.cos(nu)*rr).addScaledVector(_Q,Math.sin(nu)*rr).add(O).sub(ship).divideScalar(KMU);a[k++]=_x.x;a[k++]=_x.y;a[k++]=_x.z;}
+    g.setDrawRange(0,k/3);g.attributes.position.needsUpdate=true;m.color.set(PH.heat>2e5?0xffa060:CK.orb&&CK.orb.pe<0?0xff7a7a:0x7fe3ff);}
+  return{update,L};})();
 function setPhysics(on){CK.phys=on;$('#ckPhys').classList.toggle('on',on);$('#ckOrbit').hidden=!on;$('#ckTw').hidden=!on;CK.twi=0;twLabel();CK.vel.set(0,0,0);CK.pvInit=true;PH.p0.clear();PH.hmax=1e9;CK.orb=null;
   if(on)toast(inSystem()?'Real physics on: gravity moves the ship. You start in a circular orbit; W and S fire the engine.':'Real physics works inside a planetary system. Fly into one and it takes over.',4200);}
 const _qT=new THREE.Quaternion(),_m=new THREE.Matrix4();
@@ -3908,6 +3947,13 @@ function cockpitUpdate(dt){
   if(tier==='bh'&&camera.position.length()<1.08){camera.position.setLength(1.08);CK.vel.set(0,0,0);toast('Event horizon ahead: nothing returns from inside');}
   const kh=1-Math.exp(-dt*9);CK.hyS+=(CK.hy-CK.hyS)*kh;CK.hpS+=(CK.hp-CK.hpS)*kh;
   camera.quaternion.copy(CK.ship.quaternion).multiply(headQ());
+  // buffeting: the ship shakes with g-load and air drag, hardest in a fiery entry
+  if(phys){const sh=Math.min(1,(PH.dragA/9.8)*0.05+Math.max(0,PH.gload-1.2)*0.02+(PH.impact||0)*0.6);PH.impact=Math.max(0,(PH.impact||0)-dt*1.5);
+    if(sh>0.002){const t=performance.now()/1000,j=sh*0.012;camera.quaternion.multiply(_pq.setFromEuler(new THREE.Euler(Math.sin(t*37.)*j,Math.sin(t*29.+1.)*j,Math.sin(t*41.+2.)*j*0.6)));}
+    {let el=document.getElementById('ckHeat');if(!el){el=document.createElement('div');el.id='ckHeat';document.body.appendChild(el);}
+     const hv=clamp(Math.log10(Math.max(PH.heat,1)/1e5)/2.2,0,1);el.style.opacity=(hv*(0.75+0.25*Math.sin(performance.now()/60))).toFixed(3);}}
+  else{const el=document.getElementById('ckHeat');if(el)el.style.opacity=0;}
+  PATH.update();
   camera.updateMatrixWorld();
   CK.vkm=phys&&CK.orb?CK.orb.v:CK.vel.length()*kmPerUnit();
   if(cabin&&cabin.eng){const th=Math.min(1,Math.abs(f)+((k.ShiftLeft||k.ShiftRight)?0.4:0));cabin.eng.gain.setTargetAtTime(th*0.9,audio.ctx.currentTime,0.12);cabin.engF.frequency.setTargetAtTime(110+160*th,audio.ctx.currentTime,0.2);}
@@ -4092,6 +4138,8 @@ function drawPanel(T,dkm){if(CK.boot<0.6){drawBoot();return;}const att=attitude(
      if(O.landed){txt(g,'at rest · fire the engine upward to lift off',64,722,44,UI.cyan,500);txt(g,'GRAVITY '+fmt(O.g*1000,O.g*1000<1?3:2)+' m/s²',64,790,42,UI.grey,400);}
      else{txt(g,'LOW '+(O.pe<0?'impact':km(O.pe))+'   HIGH '+km(O.ap),64,722,48,O.pe<0?'#ff7a7a':UI.cyan,500);
      txt(g,'PERIOD '+(isFinite(O.T)?fmtTime(O.T):'none')+'   GRAVITY '+fmt(O.g*1000,O.g*1000<1?3:2)+' m/s²',64,790,42,UI.grey,400);}
+     txt(g,'G-LOAD '+fmt(O.gl||0,O.gl<10?2:0)+' g'+(O.rho>0?'   AIR '+(O.rho<0.001?O.rho.toExponential(1):fmt(O.rho,3))+' kg/m³':''),64,858,42,(O.gl||0)>6?'#ff7a7a':UI.grey,400);
+     if(O.heat>2e4)txt(g,'HEATING '+(O.heat>=1e6?fmt(O.heat/1e6,1)+' MW/m²':fmt(O.heat/1e3,0)+' kW/m²')+(O.heat>2e6?'  ·  DANGER':''),64,920,44,O.heat>2e6?'#ff7a7a':UI.gold,600);
      txt(g,'REAL PHYSICS · TIME ×'+fmt(Math.round(CK.twEff||1)),64,H-60,54,UI.green,700);}
    else txt(g,CK.auto?'AUTOPILOT':CK.phys?'REAL PHYSICS (in a system)':'MANUAL',64,H-60,58,CK.auto?UI.gold:UI.grey,700);
    const cx=W-290,cy=H/2+60,r=230;g.save();g.beginPath();g.arc(cx,cy,r,0,TAU);g.clip();g.translate(cx,cy);g.rotate(-att.roll);const off=att.pitch/DEG*4;
