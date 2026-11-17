@@ -2028,7 +2028,7 @@ await yieldUI();
    remnant, reflection nebula). It is a physical model, not a photograph. One unit = the nebula's radius. */
 const NEB_FRAG=NOISE+`
 uniform vec2 uRes;uniform vec3 uCamPos;uniform mat3 uCamRot;uniform float uTanHalf,uTime,uType,uSeed,uCav,uBip,uDust,uFil,uSteps,uPil,uShape;
-uniform vec3 uColA,uColB,uColC,uAx;uniform vec4 uS0,uS1,uS2,uS3;uniform sampler2D uPrev;uniform float uBlend,uFrame;uniform sampler2D uImg,uDep;uniform float uUseImg,uHmax,uShell;uniform vec2 uHalf;
+uniform vec3 uColA,uColB,uColC,uAx;uniform vec4 uS0,uS1,uS2,uS3;uniform sampler2D uPrev;uniform float uBlend,uFrame;uniform sampler2D uImg,uDep;uniform float uUseImg,uHmax,uShell;uniform vec2 uHalf;uniform vec4 uL0,uL1,uL2,uL3;
 vec3 nstars(vec3 d){vec3 c=vec3(0.);
  for(int k=0;k<3;k++){float sc=k==0?70.:k==1?170.:380.;vec3 q=d*sc;vec3 i=floor(q);vec3 f=fract(q)-0.5;float h=cl_h(i+float(k)*17.);
   if(h>0.975-float(k)*0.01){vec3 o=(cl_h3(i)-0.5)*0.6;float b=smoothstep(0.2,0.,length(f-o));vec3 t=mix(vec3(1.,.84,.66),vec3(.74,.84,1.),cl_h(i+3.));c+=t*b*(0.35+2.4*(h-0.96))*(k==2?0.5:1.);}}
@@ -2191,7 +2191,7 @@ void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*v
   float face=smoothstep(0.35,0.9,abs(rd.z))*smoothstep(uHmax*0.8,uHmax*2.2,abs(ro.z)+0.35*length(ro.xy));vec3 lastC=vec3(-999.);
   float a0=rd.z!=0.?(-zr-ro.z)/rd.z:-1e9,a1=rd.z!=0.?(zr-ro.z)/rd.z:1e9;float t0=max(min(a0,a1),0.),t1=max(a0,a1);
   if(abs(rd.z)<1e-5){t0=abs(ro.z)<zr?0.:1.;t1=abs(ro.z)<zr?6.:0.;}
-  t1=min(t1,t0+5.);float tm=uTime*0.018;
+  t1=min(t1,t0+5.);float tm=uTime*0.018;vec4 tL=vec4(dot(uL0.xyz-ro,rd),dot(uL1.xyz-ro,rd),dot(uL2.xyz-ro,rd),dot(uL3.xyz-ro,rd)),TL=vec4(1.);
   if(t1>t0){float N=uSteps*1.7,dt=(t1-t0)/N;float t=t0+dt*fract(cl_h(vec3(gl_FragCoord.xy,7.))+uFrame*0.618034);
    for(int i=0;i<240;i++){if(float(i)>=N||T<0.02)break;vec3 p=ro+rd*t;
     vec2 pj=p.xy*3.1/max(3.1-p.z,0.4);vec2 uvi=pj/(2.*uHalf)+0.5;
@@ -2218,12 +2218,22 @@ void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*v
      float du=dp.g*2.4*prof*th*(0.6+0.8*g);
      // stars embedded in the cloud, at real 3D positions: each one exactly where the ray passes nearest it
      {vec3 cp=p*7.;vec3 ci=floor(cp);if(ci!=lastC){lastC=ci;float hs=cl_h(ci+uSeed*1.7);float rich=prof*th*2.2+dp.b*0.6;
-      if(hs>0.9-0.12*clamp(rich,0.,1.)){vec3 sp=(ci+0.15+0.7*cl_h3(ci+3.1))/7.;float ts=dot(sp-ro,rd);
+      if(hs>(uShell>0.5?0.988:0.93-0.1*clamp(rich,0.,1.))){vec3 sp=(ci+0.15+0.7*cl_h3(ci+3.1))/7.;float ts=dot(sp-ro,rd);
        if(ts>0.){float dd=length(ro+rd*ts-sp);float ang=dd/ts;float sz=0.0011+0.0007*cl_h(ci+9.);
         float b=(0.35+3.5*pow(cl_h(ci+5.3),6.))*smoothstep(0.,0.02,ts);vec3 sc=mix(vec3(1.,.78,.55),vec3(.68,.82,1.),cl_h(ci+7.7));
-        acc+=T*sc*b*exp(-pow(ang/sz,2.))*1.6*edge;}}}}
+        acc+=T*sc*b*exp(-pow(ang/sz,2.))*1.6*edge*(1.-0.75*face);}}}}
+     // the young stars light the gas round them; cold clumps of dust drift in front, their edges lit where starlight boils them
+     float ls=uL0.w/(0.004+dot(p-uL0.xyz,p-uL0.xyz))+uL1.w/(0.004+dot(p-uL1.xyz,p-uL1.xyz))+uL2.w/(0.004+dot(p-uL2.xyz,p-uL2.xyz))+uL3.w/(0.004+dot(p-uL3.xyz,p-uL3.xyz));
+     float inner=1.-face;col*=1.+0.022*min(ls,18.)*inner;
+     float cf=cl_fbm(p*3.3+vec3(uSeed+31.,tm*0.6,0.),4.);float clump=smoothstep(0.55,0.68,cf)*inner*clamp(prof*th*3.,0.,1.);
+     float rim=(smoothstep(0.5,0.55,cf)-smoothstep(0.55,0.6,cf))*inner*clamp(prof*th*3.,0.,1.)*(0.35+0.03*min(ls,20.));
+     col=col*(1.-0.92*clump)+cE*rim*1.6;du+=clump*14.;
      acc+=T*col*edge*dt*1.3;T*=exp(-(du*1.6+max(max(cE.r,cE.g),cE.b)*prof*dens*0.5)*edge*dt);}}
+    TL=mix(TL,vec4(T),step(tL,vec4(t))*step(vec4(0.999),TL));
     t+=dt;}}
+  TL=mix(TL,vec4(T),step(vec4(t1),tL)*step(vec4(0.999),TL));
+  {vec4 L[4];L[0]=uL0;L[1]=uL1;L[2]=uL2;L[3]=uL3;for(int k=0;k<4;k++){float ts=k==0?tL.x:k==1?tL.y:k==2?tL.z:tL.w;float tr=k==0?TL.x:k==1?TL.y:k==2?TL.z:TL.w;
+   if(ts>0.&&L[k].w>0.){vec3 dv=L[k].xyz-ro;float ap=(dot(dv,dv)-ts*ts)/(ts*ts);acc+=vec3(.88,.93,1.)*L[k].w*tr*(1.-face*0.7)*(0.000012/(ap+0.0000025)+0.0009/(ap+0.0012));}}}
   vec3 colr=bg*T+acc;float Lm=max(max(colr.r,colr.g),colr.b);colr*=(1.-exp(-Lm*1.25))/max(Lm*0.82,1e-5);colr=min(colr,vec3(1.));
   colr=pow(colr,vec3(1./1.9));
   vec3 pv=texture2D(uPrev,gl_FragCoord.xy/uRes).rgb;gl_FragColor=vec4(mix(pv,colr,uBlend),1.);return;}
@@ -2250,7 +2260,7 @@ void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*v
  vec3 pv=texture2D(uPrev,gl_FragCoord.xy/uRes).rgb;gl_FragColor=vec4(mix(pv,colr,uBlend),1.);}`;
 const nebMat=new THREE.ShaderMaterial({vertexShader:'void main(){gl_Position=vec4(position.xy,0.,1.);}',fragmentShader:NEB_FRAG,depthTest:false,depthWrite:false,
   uniforms:{uRes:{value:new THREE.Vector2(1,1)},uCamPos:{value:new V3()},uCamRot:{value:new THREE.Matrix3()},uTanHalf:{value:Math.tan(25*DEG)},uTime:{value:0},uType:{value:0},uSeed:{value:1},uCav:{value:.2},uBip:{value:0},uDust:{value:1},uFil:{value:4},uSteps:{value:72},uPil:{value:0},uShape:{value:0},uAx:{value:new V3(1,1,1)},
-    uPrev:{value:null},uBlend:{value:1},uFrame:{value:0},uImg:{value:null},uDep:{value:null},uHmax:{value:0.5},uShell:{value:0},uUseImg:{value:0},uHalf:{value:new THREE.Vector2(1.15,1.15)},uColA:{value:new V3(1,.3,.4)},uColB:{value:new V3(.35,.85,.8)},uColC:{value:new V3(1,1,1)},uS0:{value:new THREE.Vector4(0,0,0,1)},uS1:{value:new THREE.Vector4(.1,.05,0,.6)},uS2:{value:new THREE.Vector4(-.08,.02,.06,.5)},uS3:{value:new THREE.Vector4(0,-.07,-.06,.4)}}});
+    uPrev:{value:null},uBlend:{value:1},uFrame:{value:0},uImg:{value:null},uDep:{value:null},uL0:{value:new THREE.Vector4()},uL1:{value:new THREE.Vector4()},uL2:{value:new THREE.Vector4()},uL3:{value:new THREE.Vector4()},uHmax:{value:0.5},uShell:{value:0},uUseImg:{value:0},uHalf:{value:new THREE.Vector2(1.15,1.15)},uColA:{value:new V3(1,.3,.4)},uColB:{value:new V3(.35,.85,.8)},uColC:{value:new V3(1,1,1)},uS0:{value:new THREE.Vector4(0,0,0,1)},uS1:{value:new THREE.Vector4(.1,.05,0,.6)},uS2:{value:new THREE.Vector4(-.08,.02,.06,.5)},uS3:{value:new THREE.Vector4(0,-.07,-.06,.4)}}});
 const nebScene=new THREE.Scene();nebScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),nebMat));
 /* Performance: the cloud is ray-marched at a fraction of the screen resolution and scaled up smoothly. While the view is
    still, each new frame is blended with the previous ones, so the image keeps sharpening for free; as soon as you move,
@@ -2312,10 +2322,13 @@ function nebApply(P,seed){const u=nebMat.uniforms,S={seed};
 // real photographs (ESA/Hubble, ESA/Webb and ESO, CC BY 4.0), with the foreground stars taken out; the app draws its own stars
 // h: how deep the cloud runs (scene units; the picture is 2.5 across); s: a hollow shell (planetary nebulae, bubbles, blast waves)
 const NEB_HD=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').matches&&renderer.capabilities.maxTextureSize>=8192;
+// the brightest young stars in each photograph (or the dying star at a planetary nebula's heart): x, y in the picture, brightness
+const NEB_STARS={"bubble":[[0.438,0.516,0.9],[0.311,0.521,0.81],[0.301,0.292,0.54],[0.215,0.755,0.41]],"butterfly":[[0.683,0.582,0.86],[0.679,0.693,0.81],[0.367,0.393,0.81],[0.303,0.287,0.78]],"carina":[[0.338,0.468,0.9],[0.346,0.302,0.87],[0.273,0.476,0.87],[0.305,0.694,0.86]],"casa":[],"catseye":[[0.5,0.5,1.0]],"cliffs":[[0.604,0.545,0.82],[0.76,0.684,0.8],[0.447,0.636,0.78],[0.617,0.407,0.77]],"cone":[[0.465,0.729,0.98],[0.613,0.805,0.95],[0.65,0.211,0.82],[0.656,0.438,0.69]],"crab":[[0.5,0.5,1.0]],"dumbbell":[[0.5,0.5,1.0]],"eagle":[[0.411,0.631,0.76],[0.613,0.584,0.71],[0.564,0.184,0.71],[0.45,0.838,0.7]],"helix":[[0.5,0.5,1.0]],"horsehead":[[0.316,0.75,0.97],[0.575,0.818,0.92],[0.35,0.494,0.92],[0.181,0.562,0.91]],"lagoon":[[0.521,0.277,0.99],[0.498,0.472,0.85],[0.238,0.522,0.69]],"m78":[[0.49,0.468,0.96],[0.672,0.345,0.7],[0.318,0.833,0.58],[0.703,0.165,0.32]],"ngc346":[[0.69,0.549,0.68],[0.466,0.48,0.66],[0.449,0.402,0.65],[0.287,0.41,0.59]],"omega":[[0.24,0.369,0.98],[0.416,0.475,0.97],[0.732,0.584,0.84],[0.717,0.258,0.37]],"orion":[[0.455,0.551,0.91],[0.33,0.785,0.83],[0.818,0.564,0.67],[0.686,0.188,0.46]],"reef":[[0.525,0.548,0.83],[0.363,0.565,0.62],[0.23,0.253,0.62],[0.252,0.645,0.6]],"ring":[[0.5,0.5,1.0]],"southring":[[0.5,0.5,1.0]],"tarantula":[[0.5,0.659,0.84],[0.398,0.642,0.79],[0.67,0.466,0.78],[0.711,0.291,0.74]],"trifid":[[0.527,0.178,0.95],[0.408,0.266,0.94],[0.447,0.393,0.91],[0.621,0.344,0.85]],"veil":[]};
 const NEB_IMG={orion:{h:.55},eagle:{h:.4},carina:{h:.5},cliffs:{h:.45},horsehead:{h:.45},ring:{h:.6,s:1},helix:{h:.75,s:1},catseye:{h:.6,s:1},crab:{h:.6},veil:{h:.5,s:1},dumbbell:{h:.7,s:1},lagoon:{h:.5},trifid:{h:.5},butterfly:{h:.5},casa:{h:.7,s:1},omega:{h:.5},
   bubble:{h:.75,s:1},tarantula:{h:.55},southring:{h:.65,s:1},cone:{h:.45},m78:{h:.45},ngc346:{h:.5},reef:{h:.5}},NEB_TEX={},NEB_DEP={};
 function nebPhoto(pk){const u=nebMat.uniforms;u.uUseImg.value=0;if(!pk||!NEB_IMG[pk])return false;
-  const use=t=>{if(NEB&&NEB.pk!==pk)return;if(!NEB_DEP[pk])return;const im=t.image,w=im.width,h=im.height,k=1.25;u.uHalf.value.set(w>=h?k:k*w/h,h>w?k:k*h/w);u.uImg.value=t;u.uDep.value=NEB_DEP[pk];u.uHmax.value=NEB_IMG[pk].h*(NEB_IMG[pk].s?1.25:1.9);u.uShell.value=NEB_IMG[pk].s||0;u.uUseImg.value=1;if(typeof NEBR!=='undefined')NEBR.n=0;};
+  const use=t=>{if(NEB&&NEB.pk!==pk)return;if(!NEB_DEP[pk])return;const im=t.image,w=im.width,h=im.height,k=1.25;u.uHalf.value.set(w>=h?k:k*w/h,h>w?k:k*h/w);u.uImg.value=t;u.uDep.value=NEB_DEP[pk];u.uHmax.value=NEB_IMG[pk].h*(NEB_IMG[pk].s?1.25:1.9);u.uShell.value=NEB_IMG[pk].s||0;u.uUseImg.value=1;
+    {const S=NEB_STARS[pk]||[],L=[u.uL0,u.uL1,u.uL2,u.uL3],H=u.uHalf.value;L.forEach((l,i)=>{const q=S[i];if(!q){l.value.set(0,0,0,0);return;}l.value.set((q[0]-0.5)*2*H.x,(q[1]-0.5)*2*H.y,((i*0.37+seedOf(pk))%1-0.5)*0.3*u.uHmax.value,(i?0.45:0.9)*q[2]);});}if(typeof NEBR!=='undefined')NEBR.n=0;};
   if(!NEB_DEP[pk])new THREE.TextureLoader().load('tex/neb/'+pk+'_d.png',d=>{d.minFilter=THREE.LinearFilter;d.generateMipmaps=false;NEB_DEP[pk]=d;if(NEB_TEX[pk])use(NEB_TEX[pk]);});
   if(NEB_TEX[pk]){use(NEB_TEX[pk]);return true;}
   toast('Loading the real photograph\u2026',8000);
