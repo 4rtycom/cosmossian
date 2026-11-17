@@ -2187,7 +2187,8 @@ void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*v
   // out as you turn away from it so it never smears. Around it, a thick envelope of turbulent 3D gas takes its colours from the
   // photograph but its shape from 3D noise, drifting slowly: the cloud you see from the side and when you fly into it.
   vec3 acc=vec3(0.);float T=1.;float zr=uHmax+0.3;
-  float face=smoothstep(0.35,0.9,abs(rd.z));
+  // inside the cloud the flat photograph would show: there it fades away and only the 3D gas and the stars embedded in it remain
+  float face=smoothstep(0.35,0.9,abs(rd.z))*smoothstep(uHmax*0.8,uHmax*2.2,abs(ro.z)+0.35*length(ro.xy));vec3 lastC=vec3(-999.);
   float a0=rd.z!=0.?(-zr-ro.z)/rd.z:-1e9,a1=rd.z!=0.?(zr-ro.z)/rd.z:1e9;float t0=max(min(a0,a1),0.),t1=max(a0,a1);
   if(abs(rd.z)<1e-5){t0=abs(ro.z)<zr?0.:1.;t1=abs(ro.z)<zr?6.:0.;}
   t1=min(t1,t0+5.);float tm=uTime*0.018;
@@ -2201,18 +2202,26 @@ void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*v
      float th=0.04+uHmax*dp.r;float z0=0.1*(cl_fbm(vec3(pj*1.2,uSeed),3.)-0.5)*(0.3+dp.r);float dz=p.z-z0;
      // gas: domain-warped turbulence that slowly churns
      vec3 q=p*2.2+vec3(uSeed);vec3 w=vec3(cl_fbm(q+vec3(tm,0.,0.),3.),cl_fbm(q+vec3(5.2,tm,1.3),3.),cl_fbm(q+vec3(1.7,9.2,tm),3.))-0.5;
-     float g=cl_fbm(q*1.9+w*2.2+vec3(0.,0.,tm*1.5),5.);float fil=pow(clamp(1.-abs(g*2.-1.),0.,1.),2.5);
-     float dens=0.06+2.6*smoothstep(0.42,0.74,g)+1.1*fil;
+     float g=cl_fbm(q*1.9+w*2.2+vec3(0.,0.,tm*1.5),5.);float fil=pow(clamp(1.-abs(g*2.-1.),0.,1.),5.);
+     float dens=0.025+3.4*pow(smoothstep(0.46,0.8,g),1.5)+1.8*fil;
+     // fine wisps that only show up close: the nearer the gas, the more detail it has
+     float near=smoothstep(1.4,0.25,t);if(near>0.01){float g2=cl_fbm(q*8.5+w*3.+vec3(tm*2.),4.);float r2=pow(clamp(1.-abs(g2*2.-1.),0.,1.),2.2);dens=mix(dens,dens*(0.04+2.6*r2)*smoothstep(0.3,0.62,g),near);}
      float prof;if(uShell>0.5){float sw=0.06+0.2*th;prof=exp(-pow((abs(dz)-th*0.85)/sw,2.))/(2.*1.7725*sw);}
      else{prof=exp(-pow(dz/(th*0.75),2.))/(1.33*th);}
      vec2 zw=vec2(cl_fbm(vec3(p.z*3.1,pj*2.)+uSeed+vec3(tm),3.),cl_fbm(vec3(p.z*3.1+7.,pj*2.+3.)+uSeed,3.))-0.5;
      vec2 wuv=clamp(uvi+w.xy*0.03+zw*vec2(0.12,0.2)*clamp(abs(dz)/(th*0.6+0.03),0.,1.5),0.,1.);
      vec3 cE=texture2D(uImg,wuv,2.5).rgb;cE=cE*cE*(0.35+0.65*cE);
-     vec3 col=cE*prof*dens*(1.-face*0.55)*(0.32+0.68*abs(rd.z));
+     vec3 col=cE*prof*dens*(1.-face*0.55)*(0.32+0.68*abs(rd.z))*(1.-0.45*near);
      // the sheet
      float sw2=0.012+0.01*dp.r;float sh=exp(-pow(dz/sw2,2.))/(1.7725*sw2);
      vec3 cS=texture2D(uImg,clamp(uvi+w.xy*0.0015,0.,1.)).rgb;cS=cS*cS*(0.35+0.65*cS);col+=cS*sh*face*0.55;
      float du=dp.g*2.4*prof*th*(0.6+0.8*g);
+     // stars embedded in the cloud, at real 3D positions: each one exactly where the ray passes nearest it
+     {vec3 cp=p*7.;vec3 ci=floor(cp);if(ci!=lastC){lastC=ci;float hs=cl_h(ci+uSeed*1.7);float rich=prof*th*2.2+dp.b*0.6;
+      if(hs>0.9-0.12*clamp(rich,0.,1.)){vec3 sp=(ci+0.15+0.7*cl_h3(ci+3.1))/7.;float ts=dot(sp-ro,rd);
+       if(ts>0.){float dd=length(ro+rd*ts-sp);float ang=dd/ts;float sz=0.0011+0.0007*cl_h(ci+9.);
+        float b=(0.35+3.5*pow(cl_h(ci+5.3),6.))*smoothstep(0.,0.02,ts);vec3 sc=mix(vec3(1.,.78,.55),vec3(.68,.82,1.),cl_h(ci+7.7));
+        acc+=T*sc*b*exp(-pow(ang/sz,2.))*1.6*edge;}}}}
      acc+=T*col*edge*dt*1.3;T*=exp(-(du*1.6+max(max(cE.r,cE.g),cE.b)*prof*dens*0.5)*edge*dt);}}
     t+=dt;}}
   vec3 colr=bg*T+acc;float Lm=max(max(colr.r,colr.g),colr.b);colr*=(1.-exp(-Lm*1.25))/max(Lm*0.82,1e-5);colr=min(colr,vec3(1.));
@@ -2260,7 +2269,7 @@ function renderNeb(dt,out){const u=nebMat.uniforms,maxS=quality==='ultra'?1.0:0.
   if(NEBR.fN>=20&&now-NEBR.lastChange>900){const avg=NEBR.fAcc/NEBR.fN;NEBR.fAcc=0;NEBR.fN=0;let s2=NEBR.scale;
     if(avg>1/42)s2=Math.max(minS,s2*0.85);else if(avg<1/57)s2=Math.min(maxS,s2*1.08);if(Math.abs(s2-NEBR.scale)>0.02){NEBR.scale=s2;NEBR.lastChange=now;}}
   nebTargets();const e1=camera.matrixWorld.elements,e0=NEBR.last.elements;let dm=0;for(let i=0;i<16;i++)dm=Math.max(dm,Math.abs(e1[i]-e0[i]));
-  const moved=dm>1e-6;NEBR.last.copy(camera.matrixWorld);if(dm>0.02)NEBR.n=Math.min(NEBR.n,2);else if(moved)NEBR.n=Math.min(NEBR.n,6);
+  const moved=dm>1e-6;NEBR.last.copy(camera.matrixWorld);if(dm>0.004)NEBR.n=0;else if(moved)NEBR.n=Math.min(NEBR.n,1); // no ghosting: history is only blended while the view holds still
   const src=NEBR.rt[NEBR.i],dst=NEBR.rt[1-NEBR.i];NEBR.i=1-NEBR.i;
   u.uRes.value.set(dst.width,dst.height);u.uCamPos.value.copy(camera.position);u.uCamRot.value.setFromMatrix4(camera.matrixWorld);u.uTanHalf.value=Math.tan(camera.fov*DEG/2);
   nebClock+=dt*3.5;u.uTime.value=nebClock; // about 3.5x faster than before, so the gas visibly rolls and the filaments writhe
