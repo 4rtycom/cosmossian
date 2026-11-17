@@ -1911,7 +1911,7 @@ await yieldUI();
    Photon paths use d²x/dλ² = −1.5 h² x / r⁵, which reproduces the photon sphere (1.5 Rs) and the shadow (~2.6 Rs).
    The accretion disk runs from the innermost stable orbit (3 Rs) outward, with Doppler beaming and gravitational redshift. */
 const BHS={
- sgra:{name:'Sagittarius A*',M:4.3e6,disk:0.35,env:1,hot:0.12,puff:1,flare:0.5,out:13,from:{type:'gal',key:'sgra'},note:'Our galaxy\'s central black hole. It feeds slowly, so its disk is faint. Imaged by the Event Horizon Telescope in 2022.'},
+ sgra:{name:'Sagittarius A*',M:4.3e6,disk:0.16,env:1,hot:0.02,puff:1,flare:1.4,out:11,view:1.05,from:{type:'gal',key:'sgra'},note:'Our galaxy\'s central black hole. It feeds slowly, so its disk is faint. Imaged by the Event Horizon Telescope in 2022.'},
  cygx1:{name:'Cygnus X-1',M:21,disk:0.8,jet:0.25,hot:1,out:12,comp:[.55,.7,1,.34],from:{type:'mwo',key:'cygx1'},note:'Gas pulled from its blue-supergiant companion forms a hot X-ray-bright disk.'},
  gaiabh1:{name:'Gaia BH1',M:9.6,disk:0,comp:[1,.9,.7,.05],from:{type:'mwo',key:'gaiabh1'},note:'Dormant: no disk at all. You see it only by how it bends the light of background stars.'},
  gaiabh3:{name:'Gaia BH3',M:33,disk:0,comp:[1,.78,.5,.09],from:{type:'mwo',key:'gaiabh3'},note:'Dormant and dark; it reveals itself only through gravitational lensing and its companion\'s orbit.'},
@@ -1919,7 +1919,7 @@ const BHS={
  a0620:{name:'A0620-00',M:6.6,disk:0.45,hot:0.6,out:10,comp:[1,.55,.3,.16],from:{type:'mwo',key:'a0620'},note:'A quiet X-ray binary with a faint disk.'},
  ton618:{name:'TON 618',M:4.07e10,disk:0.95,env:1,jet:0.8,hot:0.5,out:34,from:{type:'ucl',key:'ton618'},note:'One of the most massive black holes known. Its disk outshines entire galaxies as a quasar.'},
  '3c273':{name:'3C 273',M:8.9e8,disk:0.95,env:1,jet:1,hot:0.92,out:24,from:{type:'ucl',key:'3c273'},note:'The first quasar ever identified, and the brightest in our sky. Its jet stretches about 200,000 light-years.'},
- m87:{name:'M87*',M:6.5e9,disk:0.8,env:1,jet:1,hot:0.15,puff:0.8,out:15,from:{type:'ugal',key:'m87'},note:'The first black hole ever imaged (2019). Its shadow is wider than our Solar System.'},
+ m87:{name:'M87*',M:6.5e9,disk:0.9,env:1,jet:1,hot:0.3,puff:0.55,out:15,view:0.62,from:{type:'ugal',key:'m87'},note:'The first black hole ever imaged (2019). Its shadow is wider than our Solar System.'},
  cena:{name:'Centaurus A black hole',M:5.5e7,disk:0.7,env:1,jet:0.7,hot:0.3,puff:0.35,out:18,from:{type:'ugal',key:'cena'},note:'Powers the radio jets of Centaurus A.'},
  m31:{name:'Andromeda\'s black hole (M31*)',M:1.4e8,disk:0.25,env:1,hot:0.75,puff:0.5,out:11,from:{type:'ugal',key:'m31'},note:'Sits in Andromeda\'s double nucleus; currently quiet.'},
  m104:{name:'Sombrero black hole',M:1e9,disk:0.4,env:1,hot:0.25,puff:0.6,out:14,from:{type:'ugal',key:'m104'},note:'A billion-solar-mass black hole in the Sombrero\'s bulge.'}
@@ -2046,11 +2046,11 @@ void samp(vec3 p,out float em,out float dust,out float ion,out float syn){
    em*=shim*(0.55+0.9*smoothstep(-0.7,0.6,p.x*0.55+p.y*0.45));
    dust=smoothstep(0.53,0.74,d2)*uDust*smoothstep(1.35,0.45,re);
    dust+=smoothstep(0.24,0.06,length(p-vec3(0.2,0.14,0.22))+(n-0.5)*0.22)*5.;
-   if(uShape>5.5){float lane=abs(p.y-0.18*sin(p.x*2.3+uSeed)-(d2-0.5)*0.3);dust+=smoothstep(0.09,0.02,lane)*7.*smoothstep(1.,0.3,re);}
+   if(uShape>5.5){em*=1.9;em+=exp(-dot(p-vec3(-0.18,0.06,0.),p-vec3(-0.18,0.06,0.))/0.012)*2.2*(0.6+0.8*n);float lane=abs(p.y-0.18*sin(p.x*2.3+uSeed)-(d2-0.5)*0.3);dust+=smoothstep(0.09,0.02,lane)*7.*smoothstep(1.,0.3,re);}
    ion=clamp(exp(-re*re*5.)*1.1,0.,0.85);
   }else if(uShape<1.5){
    // pillars (Eagle): cold columns of dust standing in a glowing teal haze, their heads boiled bright by the stars above
-   float hazeN=0.6+n;em=0.12*fall*hazeN;ion=0.92;
+   float hazeN=pow(max(n-0.22,0.),1.6)*3.2;em=0.2*smoothstep(1.7,0.35,re)*hazeN*(0.6+0.8*cl_fbm(q*2.3+7.,3.));ion=0.92;
    float cols=0.;
    for(int k=0;k<3;k++){float fk=float(k);vec2 c=vec2(-0.26+0.25*fk,0.08-0.1*fk);float top=0.42-0.24*fk+0.1*step(1.5,fk);
     float hgt=top-p.y;vec2 wob=vec2(cl_n(vec3(p.y*2.2+fk*3.,uSeed,0.))-0.5,cl_n(vec3(p.y*2.2+fk*5.,uSeed,3.))-0.5)*0.16;
@@ -2150,7 +2150,7 @@ void samp(vec3 p,out float em,out float dust,out float ion,out float syn){
    syn=smoothstep(0.72,0.,re)*0.16*(0.55+0.9*cl_n(q*3.+vec3(uTime*0.05)));
   }else if(uShape<1.5){
    // Veil: all that is left of a huge thin bubble, a few torn arcs of gossamer threads
-   float torn=smoothstep(0.46,0.66,cl_fbm(u*2.2+uSeed,3.));
+   float torn=smoothstep(0.5,0.68,cl_fbm(u*2.2+uSeed,3.))*max(smoothstep(0.25,0.7,u.x+0.25*u.y),smoothstep(-0.35,-0.8,u.x-0.2*u.y))*(0.5+0.8*smoothstep(0.2,-0.6,u.z));
    float n2=cl_fbm(u*15.+q*0.9,4.);float fine=pow(ridge(n2),uFil);
    float shell=exp(-pow((r-0.8-(cl_fbm(u*5.+uSeed,3.)-0.5)*0.16)/0.04,2.));
    em=fine*shell*torn*3.2;ion=smoothstep(0.42,0.6,cl_fbm(q*2.6+5.,3.));
@@ -2222,7 +2222,7 @@ u.uFrame.value=(u.uFrame.value+1)%997;u.uSteps.value=moved?(quality==='ultra'?56
   renderer.setRenderTarget(dst);renderer.render(nebScene,bhCam);renderer.setRenderTarget(out);nebBlitMat.uniforms.uTex.value=dst.texture;nebBlitMat.uniforms.uTx.value.set(0.75/dst.width,0.75/dst.height);renderer.render(nebBlit,bhCam);}
 const HA=[1,.30,.38],O3=[.32,.86,.80],S2=[1,.42,.22];
 // look of each well-known nebula (colours: hydrogen red, oxygen teal); the rest take their look from their class
-const NEB_PRE={orion:{t:0,sh:0,a:[1,.32,.44],b:[.6,.95,.72],cav:.22,dust:1,ax:[1,.85,1],st:[1,.7,.6,.5]},eagle:{t:0,sh:1,a:[1,.74,.4],b:[.28,.72,.9],c:[.62,.36,.18],dust:1.2,st:[.9,.6,.4,.3]},
+const NEB_PRE={orion:{t:0,sh:0,a:[1,.32,.44],b:[.6,.95,.72],cav:.22,dust:1,ax:[1,.85,1],st:[1,.7,.6,.5]},eagle:{t:0,sh:1,a:[1,.74,.4],b:[.28,.72,.9],c:[.62,.36,.18],dust:1.2,st:[.35,.25,.2,.15]},
   carina:{t:0,sh:4,a:[1,.62,.3],b:[.3,.55,1],c:[.7,.38,.18],dust:1.4,st:[1.2,.7,.6,.5]},lagoon:{t:0,sh:6,a:[1,.34,.5],b:[.7,.8,.9],cav:.16,dust:1.3,ax:[.7,1.15,1],st:[.9,.5,.4,.3]},
   trifid:{t:0,sh:5,a:[1,.3,.42],b:[1,.6,.6],c:[.38,.58,1],dust:1.2,st:[1,.4,.3,.2]},omega:{t:0,sh:6,a:[1,.4,.42],b:[1,.82,.7],cav:.1,dust:1.6,ax:[.75,1.3,1.1],st:[.8,.6,.5,.4]},
   rosette:{t:0,sh:3,a:[1,.26,.32],b:[.45,.85,.85],dust:.9,st:[.9,.7,.6,.5]},horsehead:{t:0,sh:2,a:[1,.2,.26],b:[1,.45,.5],c:[.5,.65,1],dust:3.2,st:[.5,.3,.2,.2]},
@@ -2269,7 +2269,7 @@ function bhApply(key){const B=BHS[key],u=bhMat.uniforms;u.uDisk.value=B.disk;u.u
   u.uSeed.value=[...key].reduce((a,ch)=>a+ch.charCodeAt(0),0)%97;}
 function enterBH(key){
   const B=BHS[key],rs=bhSize(B.M).rs;bhKey=key;bhFrom={tier,galFocus,sel:selected};
-  tier='bh';C.focus=null;C.ground=false;C.flight=null;C.fixed.set(0,0,0);C.gFixed.set(0,0,0);C.minAlt=2.3;C.maxAlt=320;C.alt=320;C.gAlt=30;C.th=C.gTh=0.35;C.ph=C.gPh=1.525;
+  tier='bh';C.focus=null;C.ground=false;C.flight=null;C.fixed.set(0,0,0);C.gFixed.set(0,0,0);C.minAlt=2.3;C.maxAlt=320;C.alt=320;C.gAlt=30;C.th=C.gTh=0.35;C.ph=C.gPh=B.view||1.525;
   const inside=SCALE_REFS.filter(r=>r[1]/rs<1.4).slice(-1),outside=SCALE_REFS.filter(r=>r[1]/rs>=1.6&&r[1]/rs<=70).slice(0,3);
   const rings=[...inside.map(r=>[r,1]),...outside.map(r=>[r,0])].slice(0,4);
   const R=[0,0,0,0],I=[0,0,0,0];rings.forEach((x,i)=>{R[i]=x[0][1]/rs;I[i]=x[1];});
