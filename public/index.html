@@ -776,7 +776,7 @@ body.cockpit .rail{display:none}
       <li><b>Moon</b>: Lunar Reconnaissance Orbiter colour mosaic with laser-altimeter elevation (NASA, as packaged with the open-source globe.gl library).</li>
       <li><b>Mars</b>: Viking orbiter colour mosaic from the NASA 3D Resources collection.</li>
       <li><b>Cockpit</b>: the switch panels, centre-console keypads and monitor frames are photographs of Space Shuttle Columbia's flight deck (NASA Johnson Space Center, 2001, from the NASA 3D Resources collection). The window frames and glareshield around them are modelled, and the monitors show live Cosmossian data rather than Shuttle software.</li>
-      <li><b>Nebula photographs</b>: Orion, Ring, Cat's Eye, Crab, Veil, Butterfly and Cassiopeia A: NASA/ESA Hubble (ESA/Hubble, CC BY 4.0). Pillars of Creation (Eagle) and the Cosmic Cliffs (Carina): NASA, ESA, CSA, STScI (ESA/Webb, CC BY 4.0). Horsehead, Helix, Dumbbell, Lagoon, Trifid and Omega: ESO (CC BY 4.0). Foreground stars were removed and each picture is spread into a 3D cloud; face-on you see the original photograph.</li>
+      <li><b>Nebula photographs</b>: Orion, Ring, Cat's Eye, Crab, Veil, Butterfly and Cassiopeia A: NASA/ESA Hubble (ESA/Hubble, CC BY 4.0). Pillars of Creation (Eagle) and the Cosmic Cliffs (Carina): NASA, ESA, CSA, STScI (ESA/Webb, CC BY 4.0). Horsehead, Helix, Dumbbell, Lagoon, Trifid and Omega: ESO (CC BY 4.0). Also the Bubble (NASA, ESA, Hubble Heritage Team), the Cone (NASA, ESA, ACS Science Team), the Cosmic Reef NGC 2014 (NASA, ESA, STScI), the full Carina Nebula (NASA, ESA, N. Smith and the Hubble Heritage Team), the Tarantula, the Southern Ring and NGC 346 (NASA, ESA, CSA, STScI; ESA/Webb) and Messier 78 (ESO/Igor Chekalin). Foreground stars were removed; each picture is projected into a 3D volume whose depth follows its brightness (shell nebulae are hollow), so from the starting viewpoint you see the original photograph and from anywhere else a cloud you can fly round and through.</li>
       <li><b>Asteroid shapes</b>: Bennu, Eros, Itokawa, Vesta and Kleopatra are drawn from NASA 3D Resources shape models (public domain), simplified for the web. Pluto wears the New Horizons map and is joined by Charon (true sizes, drawn closer than they really are); Ceres, Eris, Haumea, Makemake and the other dwarf planets are drawn as globes in their known colours (their true surfaces have never been imaged). Other small bodies stay as dots because their shape is not known.</li>
       <li><b>Other planets and moons</b>: Io, Europa, Ganymede, Callisto, Phobos, Deimos, Titania, Oberon and the Venus radar surface are spacecraft mosaics from the NASA 3D Resources collection (Galileo, Voyager, Viking, Magellan). Mercury, Venus’s cloud tops, Uranus, Enceladus and Triton are spacecraft-based maps distributed with the Stellarium planetarium (Oleg Pluton, CC BY 4.0; NASA/JPL and the Cassini imaging team). Where a spacecraft never photographed part of a moon (Callisto, Titania, Oberon), that part is generated. Titan stays generated because its haze hides the surface. Jupiter, Saturn and Neptune use 4,096-pixel true-colour maps by Askaniy Anpilogov, built from NASA/JPL-Caltech, Cassini, Juno and Voyager data and Björn Jónsson’s mosaics (CC BY 3.0, as distributed with Celestia).</li>
       <li><b>Nebulae you can fly into</b>: built as glowing volumes from each nebula’s class: hydrogen glows red, oxygen teal, dust blocks light, and the hot stars inside light the gas. Colours and shapes follow the real objects (for example the Ring’s shell, the Eagle’s pillars, the Veil’s filaments), but the 3D structure is a physical model, not a photograph or a measured map.</li>
@@ -2021,7 +2021,7 @@ await yieldUI();
    remnant, reflection nebula). It is a physical model, not a photograph. One unit = the nebula's radius. */
 const NEB_FRAG=NOISE+`
 uniform vec2 uRes;uniform vec3 uCamPos;uniform mat3 uCamRot;uniform float uTanHalf,uTime,uType,uSeed,uCav,uBip,uDust,uFil,uSteps,uPil,uShape;
-uniform vec3 uColA,uColB,uColC,uAx;uniform vec4 uS0,uS1,uS2,uS3;uniform sampler2D uPrev;uniform float uBlend,uFrame;uniform sampler2D uImg;uniform float uUseImg;uniform vec2 uHalf;
+uniform vec3 uColA,uColB,uColC,uAx;uniform vec4 uS0,uS1,uS2,uS3;uniform sampler2D uPrev;uniform float uBlend,uFrame;uniform sampler2D uImg,uDep;uniform float uUseImg,uHmax,uShell;uniform vec2 uHalf;
 vec3 nstars(vec3 d){vec3 c=vec3(0.);
  for(int k=0;k<3;k++){float sc=k==0?70.:k==1?170.:380.;vec3 q=d*sc;vec3 i=floor(q);vec3 f=fract(q)-0.5;float h=cl_h(i+float(k)*17.);
   if(h>0.975-float(k)*0.01){vec3 o=(cl_h3(i)-0.5)*0.6;float b=smoothstep(0.2,0.,length(f-o));vec3 t=mix(vec3(1.,.84,.66),vec3(.74,.84,1.),cl_h(i+3.));c+=t*b*(0.35+2.4*(h-0.96))*(k==2?0.5:1.);}}
@@ -2176,22 +2176,26 @@ void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*v
  if(uUseImg>0.5){
   // a real Hubble / Webb / ESO photograph, turned into a cloud: the picture's light is spread through a layer whose depth and thickness
   // follow its brightness, so face-on it is the photograph and from any other angle a cloud you can fly round and into
-  vec3 acc=vec3(0.);float T=1.;float zr=0.62;
+  vec3 acc=vec3(0.);float T=1.;float zr=uHmax+0.25;
   float a0=rd.z!=0.?(-zr-ro.z)/rd.z:-1e9,a1=rd.z!=0.?(zr-ro.z)/rd.z:1e9;float t0=max(min(a0,a1),0.),t1=max(a0,a1);
   if(abs(rd.z)<1e-5){t0=abs(ro.z)<zr?0.:1.;t1=abs(ro.z)<zr?6.:0.;}
   t1=min(t1,t0+5.);
-  if(t1>t0){float N=uSteps*1.6,dt=(t1-t0)/N;float t=t0+dt*fract(cl_h(vec3(gl_FragCoord.xy,7.))+uFrame*0.618034);
+  if(t1>t0){float N=uSteps*1.7,dt=(t1-t0)/N;float t=t0+dt*fract(cl_h(vec3(gl_FragCoord.xy,7.))+uFrame*0.618034);
    for(int i=0;i<240;i++){if(float(i)>=N||T<0.02)break;vec3 p=ro+rd*t;
-    vec2 uvi=p.xy/(2.*uHalf)+0.5;
+    // the picture is projected into the volume from the viewpoint it was taken from, so seen from there it is exactly the photograph
+    vec2 pj=p.xy*3.1/max(3.1-p.z,0.4);vec2 uvi=pj/(2.*uHalf)+0.5;
     if(uvi.x>0.&&uvi.x<1.&&uvi.y>0.&&uvi.y<1.){
-     vec2 ec=(uvi-0.5)*2.;float er=max(length(ec*vec2(0.9,0.9)),max(abs(ec.x),abs(ec.y))*0.86)+0.3*(cl_fbm(vec3(p.xy*1.8,uSeed+5.),4.)-0.5);float edge=smoothstep(1.02,0.62,er);
-     vec3 c=texture2D(uImg,uvi).rgb;c=c*c*(0.35+0.65*c);float lum=max(max(c.r,c.g),c.b);
-     vec3 cs=texture2D(uImg,uvi,4.).rgb;float ls=max(max(cs.r,cs.g),cs.b);
-     float z0=0.3*(cl_fbm(vec3(p.xy*1.1,uSeed),3.)-0.5)+0.16*(ls-0.25);
-     float th=0.02+0.075*smoothstep(0.,0.55,ls);
-     float wz=exp(-pow((p.z-z0)/th,2.))/(th*1.7725);
-     float fine=0.85+0.3*cl_n(p*18.+uSeed);
-     acc+=T*c*edge*wz*fine*dt*1.25;T*=exp(-lum*edge*wz*dt*0.9);}
+     vec2 ec=(uvi-0.5)*2.;float er=max(length(ec*0.9),max(abs(ec.x),abs(ec.y))*0.86)+0.3*(cl_fbm(vec3(pj*1.8,uSeed+5.),4.)-0.5);float edge=smoothstep(1.02,0.62,er);
+     vec3 dp=texture2D(uDep,uvi).rgb;
+     // depth: the brighter and more central a part of the cloud, the deeper it runs; a shell nebula is hollow, a cloud is filled
+     float th=0.03+uHmax*dp.r;float z0=0.12*(cl_fbm(vec3(p.xy*1.2,uSeed),3.)-0.5)*(0.3+dp.r);float az=abs(p.z-z0);
+     float wz;
+     if(uShell>0.5){float sw=0.05+0.16*th;wz=exp(-pow((az-th*0.86)/sw,2.))/(2.*1.7725*sw);}
+     else{float sw=0.04+0.25*th;wz=smoothstep(th+sw,th-sw*0.3,az)/(2.*th+sw*0.7);}
+     wz*=0.82+0.36*cl_n(p*9.+uSeed);
+     vec3 c=texture2D(uImg,uvi).rgb;c=c*c*(0.35+0.65*c);
+     float du=dp.g*2.2*smoothstep(th+0.05,th*0.5,az)/(th+0.05);
+     acc+=T*c*edge*wz*dt*1.3;T*=exp(-(du*1.4+max(max(c.r,c.g),c.b)*wz*0.6)*edge*dt);}
     t+=dt;}}
   vec3 colr=bg*T+acc;float Lm=max(max(colr.r,colr.g),colr.b);colr*=(1.-exp(-Lm*1.25))/max(Lm*0.82,1e-5);colr=min(colr,vec3(1.));
   colr=pow(colr,vec3(1./1.9));
@@ -2219,7 +2223,7 @@ void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*v
  vec3 pv=texture2D(uPrev,gl_FragCoord.xy/uRes).rgb;gl_FragColor=vec4(mix(pv,colr,uBlend),1.);}`;
 const nebMat=new THREE.ShaderMaterial({vertexShader:'void main(){gl_Position=vec4(position.xy,0.,1.);}',fragmentShader:NEB_FRAG,depthTest:false,depthWrite:false,
   uniforms:{uRes:{value:new THREE.Vector2(1,1)},uCamPos:{value:new V3()},uCamRot:{value:new THREE.Matrix3()},uTanHalf:{value:Math.tan(25*DEG)},uTime:{value:0},uType:{value:0},uSeed:{value:1},uCav:{value:.2},uBip:{value:0},uDust:{value:1},uFil:{value:4},uSteps:{value:72},uPil:{value:0},uShape:{value:0},uAx:{value:new V3(1,1,1)},
-    uPrev:{value:null},uBlend:{value:1},uFrame:{value:0},uImg:{value:null},uUseImg:{value:0},uHalf:{value:new THREE.Vector2(1.15,1.15)},uColA:{value:new V3(1,.3,.4)},uColB:{value:new V3(.35,.85,.8)},uColC:{value:new V3(1,1,1)},uS0:{value:new THREE.Vector4(0,0,0,1)},uS1:{value:new THREE.Vector4(.1,.05,0,.6)},uS2:{value:new THREE.Vector4(-.08,.02,.06,.5)},uS3:{value:new THREE.Vector4(0,-.07,-.06,.4)}}});
+    uPrev:{value:null},uBlend:{value:1},uFrame:{value:0},uImg:{value:null},uDep:{value:null},uHmax:{value:0.5},uShell:{value:0},uUseImg:{value:0},uHalf:{value:new THREE.Vector2(1.15,1.15)},uColA:{value:new V3(1,.3,.4)},uColB:{value:new V3(.35,.85,.8)},uColC:{value:new V3(1,1,1)},uS0:{value:new THREE.Vector4(0,0,0,1)},uS1:{value:new THREE.Vector4(.1,.05,0,.6)},uS2:{value:new THREE.Vector4(-.08,.02,.06,.5)},uS3:{value:new THREE.Vector4(0,-.07,-.06,.4)}}});
 const nebScene=new THREE.Scene();nebScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),nebMat));
 /* Performance: the cloud is ray-marched at a fraction of the screen resolution and scaled up smoothly. While the view is
    still, each new frame is blended with the previous ones, so the image keeps sharpening for free; as soon as you move,
@@ -2258,7 +2262,8 @@ const NEB_PRE={orion:{t:0,sh:0,a:[1,.32,.44],b:[.6,.95,.72],cav:.22,dust:1,ax:[1
   crab:{t:2,sh:0,a:[1,.4,.16],b:[.6,.92,.4],c:[.45,.68,1],fil:6,st:[.35,0,0,0]},casa:{t:2,sh:2,a:[1,.5,.22],b:[.4,.92,.85],c:[.62,.5,1],cav:.25,fil:2.2,st:[0,0,0,0]},
   veil:{t:2,sh:1,a:[1,.25,.25],b:[.3,.8,1],fil:8,st:[0,0,0,0]},sn1006:{t:2,sh:3,a:[1,.35,.3],b:[.9,.5,.4],c:[.6,.82,1],fil:6,st:[0,0,0,0]},g19:{t:2,sh:2,a:[1,.6,.4],b:[.5,.8,1],c:[.5,.6,1],cav:.1,fil:5,st:[0,0,0,0]},
   pleiades:{t:3,a:[.6,.75,1],b:[.55,.72,1],dust:.6,st:[1.3,1,.9,.8]}};
-const DSO_NEB={'M 42':'orion','M 16':'eagle','M 8':'lagoon','M 20':'trifid','M 17':'omega','M 57':'ring','M 27':'dumbbell','M 1':'crab','M 45':'pleiades','NGC 6302':'butterfly','NGC 6543':'catseye','NGC 7293':'helix','NGC 2237':'rosette','NGC 7000':'northam','NGC 3372':'carina'};
+const DSO_NEB={'M 42':'orion','M 16':'eagle','M 8':'lagoon','M 20':'trifid','M 17':'omega','M 57':'ring','M 27':'dumbbell','M 1':'crab','M 45':'pleiades','NGC 6302':'butterfly','NGC 6543':'catseye','NGC 7293':'helix','NGC 2237':'rosette','NGC 7000':'northam','NGC 3372':'carina',
+  'NGC 7635':'bubble','NGC 2070':'tarantula','NGC 3132':'southring','NGC 2264':'cone','M 78':'m78','NGC 346':'ngc346','NGC 2014':'reef','NGC 3324':'cliffs','M 43':'orion','IC 434':'horsehead','NGC 6960':'veil','NGC 6992':'veil','NGC 6995':'veil'};
 const isNebType=t=>t==='Neb'||t==='PN'||t==='SNR'||t==='OC+Neb'||t==='DN';
 const mwoIsNeb=o=>/nebula|remnant/i.test(o[2]);
 let NEB=null,nebFrom=null,nebClock=0;
@@ -2278,13 +2283,16 @@ function nebApply(P,seed){const u=nebMat.uniforms,S={seed};
   [u.uS0,u.uS1,u.uS2,u.uS3].forEach((v,i)=>v.value.set(i?h(i)*sp*2:0.03,i?h(i+4)*sp*2:0.01,i?h(i+8)*sp*2:0,P.st[i]||0));
 }
 // real photographs (ESA/Hubble, ESA/Webb and ESO, CC BY 4.0), with the foreground stars taken out; the app draws its own stars
-const NEB_IMG={orion:1,eagle:1,carina:1,horsehead:1,ring:1,helix:1,catseye:1,crab:1,veil:1,dumbbell:1,lagoon:1,trifid:1,butterfly:1,casa:1,omega:1},NEB_TEX={};
+// h: how deep the cloud runs (scene units; the picture is 2.5 across); s: a hollow shell (planetary nebulae, bubbles, blast waves)
+const NEB_IMG={orion:{h:.55},eagle:{h:.4},carina:{h:.5},cliffs:{h:.45},horsehead:{h:.45},ring:{h:.6,s:1},helix:{h:.75,s:1},catseye:{h:.6,s:1},crab:{h:.6},veil:{h:.5,s:1},dumbbell:{h:.7,s:1},lagoon:{h:.5},trifid:{h:.5},butterfly:{h:.5},casa:{h:.7,s:1},omega:{h:.5},
+  bubble:{h:.75,s:1},tarantula:{h:.55},southring:{h:.65,s:1},cone:{h:.45},m78:{h:.45},ngc346:{h:.5},reef:{h:.5}},NEB_TEX={},NEB_DEP={};
 function nebPhoto(pk){const u=nebMat.uniforms;u.uUseImg.value=0;if(!pk||!NEB_IMG[pk])return false;
-  const use=t=>{if(NEB&&NEB.pk!==pk)return;const im=t.image,w=im.width,h=im.height,k=1.25;u.uHalf.value.set(w>=h?k:k*w/h,h>w?k:k*h/w);u.uImg.value=t;u.uUseImg.value=1;if(typeof NEBR!=='undefined')NEBR.n=0;};
+  const use=t=>{if(NEB&&NEB.pk!==pk)return;if(!NEB_DEP[pk])return;const im=t.image,w=im.width,h=im.height,k=1.25;u.uHalf.value.set(w>=h?k:k*w/h,h>w?k:k*h/w);u.uImg.value=t;u.uDep.value=NEB_DEP[pk];u.uHmax.value=NEB_IMG[pk].h;u.uShell.value=NEB_IMG[pk].s||0;u.uUseImg.value=1;if(typeof NEBR!=='undefined')NEBR.n=0;};
+  if(!NEB_DEP[pk])new THREE.TextureLoader().load('tex/neb/'+pk+'_d.png',d=>{d.minFilter=THREE.LinearFilter;d.generateMipmaps=false;NEB_DEP[pk]=d;if(NEB_TEX[pk])use(NEB_TEX[pk]);});
   if(NEB_TEX[pk]){use(NEB_TEX[pk]);return true;}
   toast('Loading the real photograph\u2026',8000);
   new THREE.TextureLoader().load('tex/neb/'+pk+'.jpg',t=>{t.minFilter=THREE.LinearMipmapLinearFilter;t.generateMipmaps=true;t.anisotropy=renderer.capabilities.getMaxAnisotropy();NEB_TEX[pk]=t;use(t);toast('Real photograph: '+NEB_CREDIT[pk],3200);});return true;}
-const NEB_CREDIT={orion:'NASA, ESA, M. Robberto (STScI/ESA) et al.',eagle:'NASA, ESA/Webb, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan',carina:'NASA, ESA, CSA, STScI',horsehead:'ESO',ring:'NASA, ESA and the Hubble Heritage Team',helix:'ESO/VISTA/J. Emerson',catseye:'NASA, ESA, HEIC and the Hubble Heritage Team',crab:'NASA, ESA, J. Hester and A. Loll',veil:'NASA/ESA Hubble, Z. Levay',dumbbell:'ESO',lagoon:'ESO/VPHAS+ team',trifid:'ESO',butterfly:'NASA, ESA and the Hubble SM4 ERO Team',casa:'NASA, ESA and the Hubble Heritage Team',omega:'ESO'};
+const NEB_CREDIT={orion:'NASA, ESA, M. Robberto (STScI/ESA) et al.',eagle:'NASA, ESA/Webb, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan',carina:'NASA, ESA, N. Smith (U. California, Berkeley) and the Hubble Heritage Team',horsehead:'ESO',ring:'NASA, ESA and the Hubble Heritage Team',helix:'ESO/VISTA/J. Emerson',catseye:'NASA, ESA, HEIC and the Hubble Heritage Team',crab:'NASA, ESA, J. Hester and A. Loll',veil:'NASA/ESA Hubble, Z. Levay',dumbbell:'ESO',lagoon:'ESO/VPHAS+ team',bubble:'NASA, ESA, Hubble Heritage Team',tarantula:'NASA, ESA, CSA, STScI, Webb ERO Production Team',southring:'NASA, ESA, CSA, STScI, Webb ERO Production Team',cone:'NASA, H. Ford (JHU), G. Illingworth (UCSC/LO), M. Clampin (STScI), G. Hartig (STScI), ACS Science Team, ESA',m78:'ESO/Igor Chekalin',ngc346:'NASA, ESA, CSA, O. Jones (UK ATC), G. De Marchi (ESTEC), M. Meixner (USRA)',reef:'NASA, ESA, STScI',cliffs:'NASA, ESA, CSA, STScI',trifid:'ESO',butterfly:'NASA, ESA and the Hubble SM4 ERO Team',casa:'NASA, ESA and the Hubble Heritage Team',omega:'ESO'};
 function enterNeb(src,key){const S=nebSpec(src,key);NEB=S;nebFrom={tier,galFocus,active,sel:selected};const u=nebMat.uniforms,P=S.P;
   nebApply(P,S.seed);const photo=nebPhoto(S.pk);
   if(CK.on)setCockpit(false);
