@@ -4499,7 +4499,7 @@ function frame(now){
   {const A=window.__bhAuto||(window.__bhAuto={busy:false,until:0}),tn=performance.now();
    if(tier==='bh')A.until=tn+10000;
    else if(!A.busy&&tn>A.until&&!CK.on&&!window.__intro){let hit=null;
-    if(tier==='universe'){for(const k in UCL){if(BHS[k]&&UCL[k].o.position.distanceTo(camera.position)<9){hit=k;break;}}}
+    if(tier==='universe'){if(BH_LIVE.near){hit=BH_LIVE.near;}else for(const k in UCL){if(BHS[k]&&UCL[k].o.position.distanceTo(camera.position)<9){hit=k;break;}}BH_LIVE.near=null;}
     else if(inMW()){const q=new V3();GAL.sgr.getWorldPosition(q);if(q.distanceTo(camera.position)<5)hit='sgra';
       else for(const o of MWOBJ){const ob=GAL.objs[o[0]];if(BHS[o[0]]&&ob){ob.sp.getWorldPosition(q);if(q.distanceTo(camera.position)<1.2){hit=o[0];break;}}}}
     if(hit){const ap=tier==='universe'?camera.position.clone().sub(UCL[hit].o.position).normalize():null;A.busy=true;toast('Falling toward the event horizon \u2013 true scale',3200);fadeTo(()=>{enterBH(hit);if(ap){C.th=C.gTh=Math.atan2(ap.x,ap.z);C.ph=C.gPh=clamp(Math.acos(clamp(ap.y,-1,1)),.2,Math.PI-.2);}A.busy=false;A.until=performance.now()+10000;});}}}
@@ -4516,12 +4516,14 @@ function frame(now){
   renderFeed();
   if(tier==='universe'&&BH_LIVE.length){const u=bhMat.uniforms,tn=Math.tan(camera.fov*DEG/2),H=renderer.domElement.clientHeight||innerHeight;
     for(const L of BH_LIVE){const B=BHS[L.key];L.mesh.getWorldPosition(_bhP);const dd=camera.position.distanceTo(_bhP),px=dd>0?L.size/dd/(2*tn)*H:1e9;
-      const on=!!B&&px>6;L.mesh.visible=on;if(!on||(px<120&&(L.n++%2)))continue;
+      const on=!!B&&px>6;L.mesh.visible=on;if(on&&px>H*1.5)BH_LIVE.near=L.key;if(!on||(px<120&&(L.n++%2)))continue;
+      // draw it at the sharpness it is shown at (in a few fixed steps, so the texture is not rebuilt every frame)
+      {const want=px*renderer.getPixelRatio()*1.15,cap=Math.min(2048,renderer.capabilities.maxTextureSize),sz=Math.min(cap,want<300?320:want<560?640:want<900?1024:want<1400?1536:2048);if(sz!==BH_LIVE.px){BH_LIVE.px=sz;BH_LIVE.rt.setSize(sz,sz);}}
       const sv={d:u.uDisk.value,o:u.uDiskOut.value,e:u.uEnv.value,j:u.uJet.value,s:u.uSeed.value,st:u.uSteps.value,tw:u.uTanHalf.value};
       u.uDisk.value=B.disk;u.uDiskOut.value=B.disk>0?14+12*B.disk:17;u.uEnv.value=0;u.uJet.value=B.jet||0;u.uSeed.value=[...L.key].reduce((a,ch)=>a+ch.charCodeAt(0),0)%97;
       // seen from wherever the camera really is: orbit it and the disk, the lensed far side and the jets turn with you
       u.uRes.value.set(BH_LIVE.px,BH_LIVE.px);const R=60;u.uCamPos.value.copy(camera.position).sub(_bhP);if(Math.abs(u.uCamPos.value.y)<dd*0.035)u.uCamPos.value.y=dd*0.035;u.uCamPos.value.normalize().multiplyScalar(R);
-      _bhU.set(0,1,0).applyQuaternion(camera.quaternion);_bhM.lookAt(u.uCamPos.value,_bhO,_bhU);u.uCamRot.value.setFromMatrix4(_bhM);u.uTanHalf.value=Math.tan(25*DEG);u.uTime.value=bhClock+=dt*0.9;u.uSteps.value=px>300?260:170;
+      _bhU.set(0,1,0).applyQuaternion(camera.quaternion);_bhM.lookAt(u.uCamPos.value,_bhO,_bhU);u.uCamRot.value.setFromMatrix4(_bhM);u.uTanHalf.value=Math.tan(25*DEG);u.uTime.value=bhClock+=dt*0.9;u.uSteps.value=px>500?(quality==='ultra'?400:300):px>200?240:170;
       const pr=renderer.getRenderTarget();renderer.setRenderTarget(BH_LIVE.rt);renderer.render(bhScene,bhCam);renderer.setRenderTarget(pr);
       u.uDisk.value=sv.d;u.uDiskOut.value=sv.o;u.uEnv.value=sv.e;u.uJet.value=sv.j;u.uSeed.value=sv.s;u.uSteps.value=sv.st;u.uTanHalf.value=sv.tw;}}
   const useBloom=ensureBloom();if(useBloom)renderer.setRenderTarget(rtMain);
