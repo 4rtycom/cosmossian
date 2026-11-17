@@ -341,6 +341,12 @@ body.cockpit #hint{display:none}
 #introGo:focus-visible{outline:2px solid #fff;outline-offset:5px}
 @media (max-width:520px){#introName{letter-spacing:.2em;margin-right:-.2em}#introTag{letter-spacing:.26em;margin-right:-.26em}#introGo{min-height:56px;padding:0 34px;font-size:16px}}
 @media (max-height:440px){.intro-c{gap:12px}#introName{font-size:clamp(26px,9vh,48px)}#introLogo{max-height:30vh}}
+html.stream .ckbar,html.stream #toast,html.stream #hudShow,html.stream #tvExit,html.stream .ckhelp,html.stream #ckHelp,html.stream #lblPanel,html.stream #ckExit,html.stream #ckCtl{display:none!important}
+html.stream,html.stream *{cursor:none!important}
+html.stream body.cockpit .leftcol,html.stream body.cockpit .dock,html.stream body.cockpit .rail{opacity:0!important;visibility:hidden!important}
+#strmMark{position:fixed;right:28px;bottom:22px;z-index:60;font:600 15px/1 var(--mono,ui-monospace,monospace);letter-spacing:.32em;color:rgba(255,255,255,.62);text-shadow:0 1px 8px rgba(0,0,0,.8);pointer-events:none}
+#strmMark small{display:block;margin-top:7px;font-size:11px;letter-spacing:.24em;color:rgba(150,220,255,.75)}
+body.cockpit #strmMark{bottom:auto;top:22px}
 body.nohud .leftcol,body.nohud .dock,body.nohud .rail,body.nohud #lblPanel{opacity:0!important;visibility:hidden!important;pointer-events:none!important}
 .leftcol,.dock,.rail{transition:opacity .35s ease,visibility .35s}
 body.tv #hudShow,body.tv #labels,body.tv #toast.on~#hudShow{display:none!important}
@@ -519,8 +525,9 @@ body.cockpit .rail{display:none}
    Open the page with #explore in the address to go straight to the explorer once the check has passed. */
 (function(){
   const el=document.getElementById('intro');if(!el)return;
-  const tvParam=new URLSearchParams(location.search).get('tv')==='1';if(tvParam)window.__tv=true;
-  const skip=location.hash==='#explore'||tvParam;
+  const qs=new URLSearchParams(location.search),strm=qs.get('stream');if(strm==='tv'||strm==='cockpit'){window.__stream=strm;document.documentElement.classList.add('stream');}
+  const tvParam=qs.get('tv')==='1'||strm==='tv';if(tvParam)window.__tv=true;
+  const skip=location.hash==='#explore'||tvParam||!!window.__stream;
   el.hidden=false;window.__intro=true;
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('introSky'),box=el.querySelector('.intro-c'),go=document.getElementById('introGo');
@@ -2176,26 +2183,37 @@ void main(){vec2 uv=(gl_FragCoord.xy*2.-uRes)/uRes.y;vec3 rd=normalize(uCamRot*v
  if(uUseImg>0.5){
   // a real Hubble / Webb / ESO photograph, turned into a cloud: the picture's light is spread through a layer whose depth and thickness
   // follow its brightness, so face-on it is the photograph and from any other angle a cloud you can fly round and into
-  vec3 acc=vec3(0.);float T=1.;float zr=uHmax+0.25;
+  // Two layers make one cloud. A thin sheet carries the full-resolution photograph: face-on it is exactly the picture, and it fades
+  // out as you turn away from it so it never smears. Around it, a thick envelope of turbulent 3D gas takes its colours from the
+  // photograph but its shape from 3D noise, drifting slowly: the cloud you see from the side and when you fly into it.
+  vec3 acc=vec3(0.);float T=1.;float zr=uHmax+0.3;
+  float face=smoothstep(0.35,0.9,abs(rd.z));
   float a0=rd.z!=0.?(-zr-ro.z)/rd.z:-1e9,a1=rd.z!=0.?(zr-ro.z)/rd.z:1e9;float t0=max(min(a0,a1),0.),t1=max(a0,a1);
   if(abs(rd.z)<1e-5){t0=abs(ro.z)<zr?0.:1.;t1=abs(ro.z)<zr?6.:0.;}
-  t1=min(t1,t0+5.);
+  t1=min(t1,t0+5.);float tm=uTime*0.018;
   if(t1>t0){float N=uSteps*1.7,dt=(t1-t0)/N;float t=t0+dt*fract(cl_h(vec3(gl_FragCoord.xy,7.))+uFrame*0.618034);
    for(int i=0;i<240;i++){if(float(i)>=N||T<0.02)break;vec3 p=ro+rd*t;
-    // the picture is projected into the volume from the viewpoint it was taken from, so seen from there it is exactly the photograph
     vec2 pj=p.xy*3.1/max(3.1-p.z,0.4);vec2 uvi=pj/(2.*uHalf)+0.5;
-    if(uvi.x>0.&&uvi.x<1.&&uvi.y>0.&&uvi.y<1.){
-     vec2 ec=(uvi-0.5)*2.;float er=max(length(ec*0.9),max(abs(ec.x),abs(ec.y))*0.86)+0.3*(cl_fbm(vec3(pj*1.8,uSeed+5.),4.)-0.5);float edge=smoothstep(1.02,0.62,er);
-     vec3 dp=texture2D(uDep,uvi).rgb;
-     // depth: the brighter and more central a part of the cloud, the deeper it runs; a shell nebula is hollow, a cloud is filled
-     float th=0.03+uHmax*dp.r;float z0=0.12*(cl_fbm(vec3(p.xy*1.2,uSeed),3.)-0.5)*(0.3+dp.r);float az=abs(p.z-z0);
-     float wz;
-     if(uShell>0.5){float sw=0.05+0.16*th;wz=exp(-pow((az-th*0.86)/sw,2.))/(2.*1.7725*sw);}
-     else{float sw=0.04+0.25*th;wz=smoothstep(th+sw,th-sw*0.3,az)/(2.*th+sw*0.7);}
-     wz*=0.82+0.36*cl_n(p*9.+uSeed);
-     vec3 c=texture2D(uImg,uvi).rgb;c=c*c*(0.35+0.65*c);
-     float du=dp.g*2.2*smoothstep(th+0.05,th*0.5,az)/(th+0.05);
-     acc+=T*c*edge*wz*dt*1.3;T*=exp(-(du*1.4+max(max(c.r,c.g),c.b)*wz*0.6)*edge*dt);}
+    if(uvi.x>-0.05&&uvi.x<1.05&&uvi.y>-0.05&&uvi.y<1.05){
+     vec2 ec=(uvi-0.5)*2.;float er=max(length(ec*0.9),max(abs(ec.x),abs(ec.y))*0.86)+0.3*(cl_fbm(vec3(pj*1.8,uSeed+5.),3.)-0.5);float edge=smoothstep(1.02,0.62,er);
+     if(edge>0.002){
+     vec3 dp=texture2D(uDep,clamp(uvi,0.,1.)).rgb;
+     float th=0.04+uHmax*dp.r;float z0=0.1*(cl_fbm(vec3(pj*1.2,uSeed),3.)-0.5)*(0.3+dp.r);float dz=p.z-z0;
+     // gas: domain-warped turbulence that slowly churns
+     vec3 q=p*2.2+vec3(uSeed);vec3 w=vec3(cl_fbm(q+vec3(tm,0.,0.),3.),cl_fbm(q+vec3(5.2,tm,1.3),3.),cl_fbm(q+vec3(1.7,9.2,tm),3.))-0.5;
+     float g=cl_fbm(q*1.9+w*2.2+vec3(0.,0.,tm*1.5),5.);float fil=pow(clamp(1.-abs(g*2.-1.),0.,1.),2.5);
+     float dens=0.06+2.6*smoothstep(0.42,0.74,g)+1.1*fil;
+     float prof;if(uShell>0.5){float sw=0.06+0.2*th;prof=exp(-pow((abs(dz)-th*0.85)/sw,2.))/(2.*1.7725*sw);}
+     else{prof=exp(-pow(dz/(th*0.75),2.))/(1.33*th);}
+     vec2 zw=vec2(cl_fbm(vec3(p.z*3.1,pj*2.)+uSeed+vec3(tm),3.),cl_fbm(vec3(p.z*3.1+7.,pj*2.+3.)+uSeed,3.))-0.5;
+     vec2 wuv=clamp(uvi+w.xy*0.03+zw*vec2(0.12,0.2)*clamp(abs(dz)/(th*0.6+0.03),0.,1.5),0.,1.);
+     vec3 cE=texture2D(uImg,wuv,2.5).rgb;cE=cE*cE*(0.35+0.65*cE);
+     vec3 col=cE*prof*dens*(1.-face*0.55)*(0.32+0.68*abs(rd.z));
+     // the sheet
+     float sw2=0.012+0.01*dp.r;float sh=exp(-pow(dz/sw2,2.))/(1.7725*sw2);
+     vec3 cS=texture2D(uImg,clamp(uvi+w.xy*0.0015,0.,1.)).rgb;cS=cS*cS*(0.35+0.65*cS);col+=cS*sh*face*0.55;
+     float du=dp.g*2.4*prof*th*(0.6+0.8*g);
+     acc+=T*col*edge*dt*1.3;T*=exp(-(du*1.6+max(max(cE.r,cE.g),cE.b)*prof*dens*0.5)*edge*dt);}}
     t+=dt;}}
   vec3 colr=bg*T+acc;float Lm=max(max(colr.r,colr.g),colr.b);colr*=(1.-exp(-Lm*1.25))/max(Lm*0.82,1e-5);colr=min(colr,vec3(1.));
   colr=pow(colr,vec3(1./1.9));
@@ -2236,7 +2254,7 @@ function nebTargets(){const v=new THREE.Vector2();renderer.getDrawingBufferSize(
   if(NEBR.rt[0]&&NEBR.rt[0].width===w&&NEBR.rt[0].height===h)return;
   NEBR.rt.forEach(r=>r&&r.dispose());const o={minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:false,type:renderer.capabilities.isWebGL2?THREE.HalfFloatType:THREE.UnsignedByteType};
   NEBR.rt=[new THREE.WebGLRenderTarget(w,h,o),new THREE.WebGLRenderTarget(w,h,o)];NEBR.n=0;NEBR.started=false;}
-function renderNeb(dt,out){const u=nebMat.uniforms,maxS=quality==='ultra'?0.8:0.65,minS=CK.on?0.42:0.3;if(NEBR.scale<minS)NEBR.scale=minS;
+function renderNeb(dt,out){const u=nebMat.uniforms,maxS=quality==='ultra'?1.0:0.7,minS=CK.on?0.42:0.3;if(NEBR.scale<minS)NEBR.scale=minS;
   // adapt resolution to keep the frame rate up (checked about once a second)
   NEBR.fAcc+=dt;NEBR.fN++;const now=performance.now();
   if(NEBR.fN>=20&&now-NEBR.lastChange>900){const avg=NEBR.fAcc/NEBR.fN;NEBR.fAcc=0;NEBR.fN=0;let s2=NEBR.scale;
@@ -2284,14 +2302,15 @@ function nebApply(P,seed){const u=nebMat.uniforms,S={seed};
 }
 // real photographs (ESA/Hubble, ESA/Webb and ESO, CC BY 4.0), with the foreground stars taken out; the app draws its own stars
 // h: how deep the cloud runs (scene units; the picture is 2.5 across); s: a hollow shell (planetary nebulae, bubbles, blast waves)
+const NEB_HD=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').matches&&renderer.capabilities.maxTextureSize>=8192;
 const NEB_IMG={orion:{h:.55},eagle:{h:.4},carina:{h:.5},cliffs:{h:.45},horsehead:{h:.45},ring:{h:.6,s:1},helix:{h:.75,s:1},catseye:{h:.6,s:1},crab:{h:.6},veil:{h:.5,s:1},dumbbell:{h:.7,s:1},lagoon:{h:.5},trifid:{h:.5},butterfly:{h:.5},casa:{h:.7,s:1},omega:{h:.5},
   bubble:{h:.75,s:1},tarantula:{h:.55},southring:{h:.65,s:1},cone:{h:.45},m78:{h:.45},ngc346:{h:.5},reef:{h:.5}},NEB_TEX={},NEB_DEP={};
 function nebPhoto(pk){const u=nebMat.uniforms;u.uUseImg.value=0;if(!pk||!NEB_IMG[pk])return false;
-  const use=t=>{if(NEB&&NEB.pk!==pk)return;if(!NEB_DEP[pk])return;const im=t.image,w=im.width,h=im.height,k=1.25;u.uHalf.value.set(w>=h?k:k*w/h,h>w?k:k*h/w);u.uImg.value=t;u.uDep.value=NEB_DEP[pk];u.uHmax.value=NEB_IMG[pk].h;u.uShell.value=NEB_IMG[pk].s||0;u.uUseImg.value=1;if(typeof NEBR!=='undefined')NEBR.n=0;};
+  const use=t=>{if(NEB&&NEB.pk!==pk)return;if(!NEB_DEP[pk])return;const im=t.image,w=im.width,h=im.height,k=1.25;u.uHalf.value.set(w>=h?k:k*w/h,h>w?k:k*h/w);u.uImg.value=t;u.uDep.value=NEB_DEP[pk];u.uHmax.value=NEB_IMG[pk].h*(NEB_IMG[pk].s?1.25:1.9);u.uShell.value=NEB_IMG[pk].s||0;u.uUseImg.value=1;if(typeof NEBR!=='undefined')NEBR.n=0;};
   if(!NEB_DEP[pk])new THREE.TextureLoader().load('tex/neb/'+pk+'_d.png',d=>{d.minFilter=THREE.LinearFilter;d.generateMipmaps=false;NEB_DEP[pk]=d;if(NEB_TEX[pk])use(NEB_TEX[pk]);});
   if(NEB_TEX[pk]){use(NEB_TEX[pk]);return true;}
   toast('Loading the real photograph\u2026',8000);
-  new THREE.TextureLoader().load('tex/neb/'+pk+'.jpg',t=>{t.minFilter=THREE.LinearMipmapLinearFilter;t.generateMipmaps=true;t.anisotropy=renderer.capabilities.getMaxAnisotropy();NEB_TEX[pk]=t;use(t);toast('Real photograph: '+NEB_CREDIT[pk],3200);});return true;}
+  new THREE.TextureLoader().load('tex/neb/'+pk+(NEB_HD?'':'_2k')+'.jpg',t=>{t.minFilter=THREE.LinearMipmapLinearFilter;t.generateMipmaps=true;t.anisotropy=renderer.capabilities.getMaxAnisotropy();NEB_TEX[pk]=t;use(t);toast('Real photograph: '+NEB_CREDIT[pk],3200);});return true;}
 const NEB_CREDIT={orion:'NASA, ESA, M. Robberto (STScI/ESA) et al.',eagle:'NASA, ESA/Webb, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan',carina:'NASA, ESA, N. Smith (U. California, Berkeley) and the Hubble Heritage Team',horsehead:'ESO',ring:'NASA, ESA and the Hubble Heritage Team',helix:'ESO/VISTA/J. Emerson',catseye:'NASA, ESA, HEIC and the Hubble Heritage Team',crab:'NASA, ESA, J. Hester and A. Loll',veil:'NASA/ESA Hubble, Z. Levay',dumbbell:'ESO',lagoon:'ESO/VPHAS+ team',bubble:'NASA, ESA, Hubble Heritage Team',tarantula:'NASA, ESA, CSA, STScI, Webb ERO Production Team',southring:'NASA, ESA, CSA, STScI, Webb ERO Production Team',cone:'NASA, H. Ford (JHU), G. Illingworth (UCSC/LO), M. Clampin (STScI), G. Hartig (STScI), ACS Science Team, ESA',m78:'ESO/Igor Chekalin',ngc346:'NASA, ESA, CSA, O. Jones (UK ATC), G. De Marchi (ESTEC), M. Meixner (USRA)',reef:'NASA, ESA, STScI',cliffs:'NASA, ESA, CSA, STScI',trifid:'ESO',butterfly:'NASA, ESA and the Hubble SM4 ERO Team',casa:'NASA, ESA and the Hubble Heritage Team',omega:'ESO'};
 function enterNeb(src,key){const S=nebSpec(src,key);NEB=S;nebFrom={tier,galFocus,active,sel:selected};const u=nebMat.uniforms,P=S.P;
   nebApply(P,S.seed);const photo=nebPhoto(S.pk);
@@ -4415,6 +4434,25 @@ function setCockpit(on){
   else{navBig(false);PH.active=false;CK.twEff=1;if(TS||wasTS){updateTrueScale();}stopCabin();camera.fov=50;camera.updateProjectionMatrix();ckClip();CK.auto=false;$('#ckAuto').classList.remove('on');syncCFromCamera();}
 }
 $('#bCockpit').addEventListener('click',()=>setCockpit(true));
+/* Stream mode (?stream=cockpit): the autopilot flies on forever. It visits a few worlds in the system it is in, one after another,
+   then jumps to another star system with known planets and does the same there. */
+const STRM={on:false,q:[],n:0,t:0,hold:0,wait:0,last:''};
+function strmMark(sub){let m=document.getElementById('strmMark');if(!m){m=document.createElement('div');m.id='strmMark';document.body.appendChild(m);}m.innerHTML='COSMOSSIAN.COM'+(sub?'<small>'+sub+'</small>':'');}
+function strmNext(){if(fading)return;if(!CK.on){setCockpit(true);STRM.wait=4;return;}
+  if(!inSystem()){STRM.wait=3;return;}
+  if(!STRM.q.length){
+    if(STRM.n>=4){STRM.n=0;const here=active==='sol'?'Sun':active,pool=['Sun',...STARS.filter(S=>/confirmed/.test(S[6])).map(S=>S[0])].filter(n=>n!==here&&n!==STRM.last);
+      const to=pool[(Math.random()*pool.length)|0];STRM.last=here;strmMark('Jumping to the '+(to==='Sun'?'Solar System':to+' system'));ckJumpTo(to);STRM.wait=7;return;}
+    const all=sysBodies().filter(b=>b&&b.key);const pl=all.filter(b=>b.kind!=='star');for(let i=pl.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[pl[i],pl[j]]=[pl[j],pl[i]];}
+    STRM.q=pl.slice(0,3);const st=all.find(b=>b.kind==='star');if(st)STRM.q.push(st);if(!STRM.q.length){STRM.n=4;return;}}
+  const b=STRM.q.shift();STRM.n++;select({type:'body',key:b.key});CK.auto=true;$('#ckAuto').classList.add('on');STRM.t=0;STRM.hold=0;
+  strmMark('Autopilot → '+b.name+(active!=='sol'?' · '+active+' system':''));}
+function strmTick(dt){if(!STRM.on||fading)return;if(STRM.wait>0){STRM.wait-=dt;if(STRM.wait<=0)strmNext();return;}
+  STRM.t+=dt;if(CK.auto){if(STRM.t>110){CK.auto=false;$('#ckAuto').classList.remove('on');}return;}
+  STRM.hold+=dt;if(STRM.hold>8)strmNext();}
+function strmStart(){if(window.__stream!=='cockpit'||STRM.on)return;STRM.on=true;strmMark('');setCockpit(true);STRM.wait=5;}
+addEventListener('cosmossian:entered',()=>{if(window.__stream==='cockpit')setTimeout(strmStart,800);if(window.__stream==='tv')strmMark('');});
+if(window.__stream&&!window.__intro)setTimeout(()=>{if(window.__stream==='cockpit')strmStart();else strmMark('');},800);
 $('#ckExit').addEventListener('click',()=>setCockpit(false));
 $('#ckStop').addEventListener('click',()=>{CK.auto=false;$('#ckAuto').classList.remove('on');CK.throttle=0;$('#ckThrottle').value=0;$('#ckThrTxt').textContent='0%';CK.vel.set(0,0,0);
   if(CK.phys&&CK.pv&&PH.active){CK.pv.copy(PH.vD);toast('Engines off and speed matched to '+(CK.orb?CK.orb.name:'the nearest body')+': gravity now pulls you straight in',3600);}});
@@ -4651,7 +4689,7 @@ function frame(now){
   updateTrueScale();
   updateLayers(dt);
   scene.updateMatrixWorld();
-  tvTick(dt);
+  tvTick(dt);strmTick(dt);
   if(CK.on&&CK.handoff<=0&&!fading)cockpitUpdate(dt);else{updateCamera(dt);if(CK.on){CK.handoff-=dt;if(CK.handoff<=0){C.flight=null;CK.ship.quaternion.copy(camera.quaternion);CK.hy=CK.hp=CK.hyS=CK.hpS=0;}}}
   camera.updateMatrixWorld();
   starfield.position.copy(camera.position);skyStars.visible=tier==='solar'||tier==='exo'||tier==='surface';skyStars.position.copy(camera.position);{const f=TS?1e5:1;if(skyStars.userData.f!==f){skyStars.userData.f=f;skyStars.children.forEach(sp=>{if(!sp.userData.base)sp.userData.base=sp.position.clone();sp.position.copy(sp.userData.base).multiplyScalar(f);});}}starfield.scale.setScalar(TS?3e4:1);
