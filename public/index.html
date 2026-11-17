@@ -2464,7 +2464,8 @@ function sbPos(o,jd,out){const q=o[2],e=o[3],dt=jd-o[7];let r,nu;
   return sbXYZ(o,r,nu,out);}
 function sbXYZ(o,r,nu,out){const i=o[4]*DEG,O=o[5]*DEG,u=o[6]*DEG+nu,cu=Math.cos(u),su=Math.sin(u),cO=Math.cos(O),sO=Math.sin(O),ci=Math.cos(i);
   return out.set(r*(cO*cu-sO*su*ci),r*(sO*cu+cO*su*ci),r*su*Math.sin(i));}
-const SB=jsonBlock('smallbodies')||[];
+// Sun-grazing comet fragments (the SOHO/Kreutz family, perihelion inside 0.05 AU) burn up at the Sun: they are not drawn sailing on afterwards
+const SB=(jsonBlock('smallbodies')||[]).filter(o=>!(o[12]==='live'&&o[1]==='comet'&&o[2]<0.05));
 const SBT={asteroid:'Asteroid',comet:'Comet','dwarf planet':'Dwarf planet',cubewano:'Kuiper-belt object',plutino:'Kuiper-belt object (plutino)','scattered disc object':'Scattered-disc object',sednoid:'Sednoid · far beyond Neptune','interstellar object':'Interstellar visitor'};
 const SBC={asteroid:[.80,.74,.62],comet:[.50,.90,1.0],'interstellar object':[1.0,.45,1.0]};
 const sbName=o=>o[0].replace(/ \(\d{4}\)$/,'');

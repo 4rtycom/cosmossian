@@ -417,6 +417,7 @@ async function refreshSB(env) {
       const name = String(d[ix('full_name')]).trim().replace(/\s*\([^)]*\)\s*$/, '');
       if (!name || have.has(key(name))) continue;
       const q = +d[ix('q')], e = +d[ix('e')], tp = +d[ix('tp')]; if (!(q > 0) || !(e >= 0) || !isFinite(tp)) continue;
+      if (kind === 'comet' && q < 0.05) continue; // Sun-grazing fragments (SOHO/Kreutz) do not survive perihelion
       const a = e < 1 ? q / (1 - e) : 0, H = +(d[ix(kind === 'comet' ? 'M1' : 'H')]) || 15;
       const type = kind === 'comet' ? 'comet' : a > 30 ? 'cubewano' : 'asteroid';
       cur.push([name, type, q, e, +d[ix('i')], +d[ix('om')], +d[ix('w')], tp, H, 0, '', '', 'live']); have.add(key(name)); n++;
