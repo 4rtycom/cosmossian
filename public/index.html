@@ -344,7 +344,6 @@ body.cockpit #hint{display:none}
 html.stream .ckbar,html.stream #toast,html.stream #hudShow,html.stream #tvExit,html.stream .ckhelp,html.stream #ckHelp,html.stream #lblPanel,html.stream #ckExit,html.stream #ckCtl{display:none!important}
 html.stream,html.stream *{cursor:none!important}
 html.stream body.cockpit .leftcol,html.stream body.cockpit .dock,html.stream body.cockpit .rail{opacity:0!important;visibility:hidden!important}
-#ckHeat{position:fixed;inset:0;z-index:5;pointer-events:none;opacity:0;mix-blend-mode:screen;background:radial-gradient(ellipse 46% 26% at 50% 36%,rgba(255,190,110,.75),rgba(255,110,50,.5) 45%,rgba(255,70,130,.22) 75%,rgba(0,0,0,0) 100%)}
 #strmMark{position:fixed;right:28px;bottom:22px;z-index:60;font:600 15px/1 var(--mono,ui-monospace,monospace);letter-spacing:.32em;color:rgba(255,255,255,.62);text-shadow:0 1px 8px rgba(0,0,0,.8);pointer-events:none}
 #strmMark small{display:block;margin-top:7px;font-size:11px;letter-spacing:.24em;color:rgba(150,220,255,.75)}
 body.cockpit #strmMark{bottom:auto;top:22px}
@@ -2327,13 +2326,25 @@ const NEB_HD=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)
 const NEB_STARS={"bubble":[[0.438,0.516,0.9],[0.311,0.521,0.81],[0.301,0.292,0.54],[0.215,0.755,0.41]],"butterfly":[[0.683,0.582,0.86],[0.679,0.693,0.81],[0.367,0.393,0.81],[0.303,0.287,0.78]],"carina":[[0.338,0.468,0.9],[0.346,0.302,0.87],[0.273,0.476,0.87],[0.305,0.694,0.86]],"casa":[],"catseye":[[0.5,0.5,1.0]],"cliffs":[[0.604,0.545,0.82],[0.76,0.684,0.8],[0.447,0.636,0.78],[0.617,0.407,0.77]],"cone":[[0.465,0.729,0.98],[0.613,0.805,0.95],[0.65,0.211,0.82],[0.656,0.438,0.69]],"crab":[[0.5,0.5,1.0]],"dumbbell":[[0.5,0.5,1.0]],"eagle":[[0.411,0.631,0.76],[0.613,0.584,0.71],[0.564,0.184,0.71],[0.45,0.838,0.7]],"helix":[[0.5,0.5,1.0]],"horsehead":[[0.316,0.75,0.97],[0.575,0.818,0.92],[0.35,0.494,0.92],[0.181,0.562,0.91]],"lagoon":[[0.521,0.277,0.99],[0.498,0.472,0.85],[0.238,0.522,0.69]],"m78":[[0.49,0.468,0.96],[0.672,0.345,0.7],[0.318,0.833,0.58],[0.703,0.165,0.32]],"ngc346":[[0.69,0.549,0.68],[0.466,0.48,0.66],[0.449,0.402,0.65],[0.287,0.41,0.59]],"omega":[[0.24,0.369,0.98],[0.416,0.475,0.97],[0.732,0.584,0.84],[0.717,0.258,0.37]],"orion":[[0.455,0.551,0.91],[0.33,0.785,0.83],[0.818,0.564,0.67],[0.686,0.188,0.46]],"reef":[[0.525,0.548,0.83],[0.363,0.565,0.62],[0.23,0.253,0.62],[0.252,0.645,0.6]],"ring":[[0.5,0.5,1.0]],"southring":[[0.5,0.5,1.0]],"tarantula":[[0.5,0.659,0.84],[0.398,0.642,0.79],[0.67,0.466,0.78],[0.711,0.291,0.74]],"trifid":[[0.527,0.178,0.95],[0.408,0.266,0.94],[0.447,0.393,0.91],[0.621,0.344,0.85]],"veil":[]};
 const NEB_IMG={orion:{h:.55},eagle:{h:.4},carina:{h:.5},cliffs:{h:.45},horsehead:{h:.45},ring:{h:.6,s:1},helix:{h:.75,s:1},catseye:{h:.6,s:1},crab:{h:.6},veil:{h:.5,s:1},dumbbell:{h:.7,s:1},lagoon:{h:.5},trifid:{h:.5},butterfly:{h:.5},casa:{h:.7,s:1},omega:{h:.5},
   bubble:{h:.75,s:1},tarantula:{h:.55},southring:{h:.65,s:1},cone:{h:.45},m78:{h:.45},ngc346:{h:.5},reef:{h:.5}},NEB_TEX={},NEB_DEP={};
+// Photographs are decoded off the main thread (createImageBitmap), the 2K version shows first and the 4K one swaps in when it arrives,
+// and both start downloading as soon as a nebula is selected, before you fly in.
+const NEB_LD={};
+function nebLoad(pk){if(NEB_LD[pk])return NEB_LD[pk];const L=NEB_LD[pk]={};
+  const ib='createImageBitmap' in window;
+  const get=(src,mip)=>new Promise((res,rej)=>{const fin=t=>{t.minFilter=mip?THREE.LinearMipmapLinearFilter:THREE.LinearFilter;t.magFilter=THREE.LinearFilter;t.generateMipmaps=!!mip;if(mip)t.anisotropy=renderer.capabilities.getMaxAnisotropy();t.needsUpdate=true;res(t);};
+    if(ib)fetch(src).then(r=>{if(!r.ok)throw 0;return r.blob();}).then(b=>createImageBitmap(b,{imageOrientation:'flipY'})).then(img=>{const t=new THREE.Texture(img);t.flipY=false;fin(t);})
+      .catch(()=>new THREE.TextureLoader().load(src,fin,undefined,rej));
+    else new THREE.TextureLoader().load(src,fin,undefined,rej);});
+  L.d=get('tex/neb/'+pk+'_d.png',false).then(t=>NEB_DEP[pk]=t);
+  L.lo=get('tex/neb/'+pk+'_2k.jpg',true).then(t=>{if(!NEB_TEX[pk])NEB_TEX[pk]=t;return t;});
+  if(NEB_HD)L.hi=L.lo.then(()=>get('tex/neb/'+pk+'.jpg',true)).then(t=>{const old=NEB_TEX[pk];NEB_TEX[pk]=t;if(old&&old!==t)setTimeout(()=>old.dispose(),2000);return t;});
+  return L;}
 function nebPhoto(pk){const u=nebMat.uniforms;u.uUseImg.value=0;if(!pk||!NEB_IMG[pk])return false;
-  const use=t=>{if(NEB&&NEB.pk!==pk)return;if(!NEB_DEP[pk])return;const im=t.image,w=im.width,h=im.height,k=1.25;u.uHalf.value.set(w>=h?k:k*w/h,h>w?k:k*h/w);u.uImg.value=t;u.uDep.value=NEB_DEP[pk];u.uHmax.value=NEB_IMG[pk].h*(NEB_IMG[pk].s?1.25:1.9);u.uShell.value=NEB_IMG[pk].s||0;u.uUseImg.value=1;
+  const use=()=>{if(NEB&&NEB.pk!==pk)return;const t=NEB_TEX[pk];if(!t||!NEB_DEP[pk])return;const im=t.image,w=im.width,h=im.height,k=1.25;u.uHalf.value.set(w>=h?k:k*w/h,h>w?k:k*h/w);u.uImg.value=t;u.uDep.value=NEB_DEP[pk];u.uHmax.value=NEB_IMG[pk].h*(NEB_IMG[pk].s?1.25:1.9);u.uShell.value=NEB_IMG[pk].s||0;u.uUseImg.value=1;
     {const S=NEB_STARS[pk]||[],L=[u.uL0,u.uL1,u.uL2,u.uL3],H=u.uHalf.value;L.forEach((l,i)=>{const q=S[i];if(!q){l.value.set(0,0,0,0);return;}l.value.set((q[0]-0.5)*2*H.x,(q[1]-0.5)*2*H.y,((i*0.37+seedOf(pk))%1-0.5)*0.3*u.uHmax.value,(i?0.45:0.9)*q[2]);});}if(typeof NEBR!=='undefined')NEBR.n=0;};
-  if(!NEB_DEP[pk])new THREE.TextureLoader().load('tex/neb/'+pk+'_d.png',d=>{d.minFilter=THREE.LinearFilter;d.generateMipmaps=false;NEB_DEP[pk]=d;if(NEB_TEX[pk])use(NEB_TEX[pk]);});
-  if(NEB_TEX[pk]){use(NEB_TEX[pk]);return true;}
-  toast('Loading the real photograph\u2026',8000);
-  new THREE.TextureLoader().load('tex/neb/'+pk+(NEB_HD?'':'_2k')+'.jpg',t=>{t.minFilter=THREE.LinearMipmapLinearFilter;t.generateMipmaps=true;t.anisotropy=renderer.capabilities.getMaxAnisotropy();NEB_TEX[pk]=t;use(t);toast('Real photograph: '+NEB_CREDIT[pk],3200);});return true;}
+  const L=nebLoad(pk),ready=NEB_TEX[pk]&&NEB_DEP[pk];if(ready)use();else toast('Loading the real photograph…',6000);
+  Promise.all([L.d,L.lo]).then(()=>{if(!ready)toast('Real photograph: '+NEB_CREDIT[pk],3200);use();}).catch(()=>{});
+  if(L.hi)L.hi.then(use).catch(()=>{});return true;}
 const NEB_CREDIT={orion:'NASA, ESA, M. Robberto (STScI/ESA) et al.',eagle:'NASA, ESA/Webb, CSA, STScI; J. DePasquale, A. Koekemoer, A. Pagan',carina:'NASA, ESA, N. Smith (U. California, Berkeley) and the Hubble Heritage Team',horsehead:'ESO',ring:'NASA, ESA and the Hubble Heritage Team',helix:'ESO/VISTA/J. Emerson',catseye:'NASA, ESA, HEIC and the Hubble Heritage Team',crab:'NASA, ESA, J. Hester and A. Loll',veil:'NASA/ESA Hubble, Z. Levay',dumbbell:'ESO',lagoon:'ESO/VPHAS+ team',bubble:'NASA, ESA, Hubble Heritage Team',tarantula:'NASA, ESA, CSA, STScI, Webb ERO Production Team',southring:'NASA, ESA, CSA, STScI, Webb ERO Production Team',cone:'NASA, H. Ford (JHU), G. Illingworth (UCSC/LO), M. Clampin (STScI), G. Hartig (STScI), ACS Science Team, ESA',m78:'ESO/Igor Chekalin',ngc346:'NASA, ESA, CSA, O. Jones (UK ATC), G. De Marchi (ESTEC), M. Meixner (USRA)',reef:'NASA, ESA, STScI',cliffs:'NASA, ESA, CSA, STScI',trifid:'ESO',butterfly:'NASA, ESA and the Hubble SM4 ERO Team',casa:'NASA, ESA and the Hubble Heritage Team',omega:'ESO'};
 function enterNeb(src,key){const S=nebSpec(src,key);NEB=S;nebFrom={tier,galFocus,active,sel:selected};const u=nebMat.uniforms,P=S.P;
   nebApply(P,S.seed);const photo=nebPhoto(S.pk);
@@ -3390,7 +3401,7 @@ function select(s){
   const bk=bhKeyFor(s);if(bk&&tier!=='bh')chips.unshift(`<button class="chip enter" type="button" data-bh="${bk}">${s.type==='ugal'?'Visit '+BHS[bk].name:'Fly to the event horizon'} (true scale) →</button>`);
   $('#tChips').innerHTML=chips.join('');telemetry();teleMore(s);
   {const g=$('#teleGo'),me=active==='sol'?'Sun':active,sys=(s.type==='star'||s.type==='cat')&&!(inSystem()&&s.key===me)?s.key:null;g.hidden=!sys;g.dataset.sys=sys||'';g.dataset.go='';{let nb=null,nm='';if(tier!=='neb'){if(s.type==='mwo'&&GAL.objs[s.key]&&mwoIsNeb(GAL.objs[s.key].o)){nb='neb:mwo:'+s.key;nm=GAL.objs[s.key].o[1].split(' · ')[0];}else if(s.type==='dso'&&SKY.ready&&isNebType(SKY.dso[s.key][2])){nb='neb:dso:'+s.key;nm=dsoName(SKY.dso[s.key]);}}
-    if(nb){g.hidden=false;g.dataset.go=nb;const t='Fly into the '+nm;g.title=t;g.setAttribute('aria-label',t);}}
+    if(nb){try{const pk=nb.startsWith('neb:mwo:')?nb.slice(8):DSO_NEB[SKY.dso[+nb.slice(8)][5]];if(pk&&NEB_IMG[pk])nebLoad(pk);}catch(e){}g.hidden=false;g.dataset.go=nb;const t='Fly into the '+nm;g.title=t;g.setAttribute('aria-label',t);}}
   if(s.type==='dso'&&SKY.ready&&!g.dataset.go){const gk=dsoGalaxy(SKY.dso[s.key]);if(gk){g.hidden=false;g.dataset.go='ugal:'+gk;const t='Fly to the '+dsoName(SKY.dso[s.key]);g.title=t;g.setAttribute('aria-label',t);}}{const bk=$('#teleBack'),bb=s.type==='body'&&bodies[s.key],show=!!bb&&!(bb.kind==='star'&&!bb.comp)||s.type==='sb';const inNeb=tier==='neb';bk.hidden=!(show||inNeb);if(inNeb){bk.title='Leave the nebula';bk.setAttribute('aria-label','Leave the nebula');}else if(show){const t='Back to the whole '+(active==='sol'?'Solar System':active+' system');bk.title=t;bk.setAttribute('aria-label',t);}}if(sys){const t='Go to the '+(sys==='Sun'?'Solar System':sys+' system');g.title=t;g.setAttribute('aria-label',t);}}
   planetList.concat(exoBodies).forEach(p=>{p.orbit.material.color.set(s.type==='body'&&(s.key===p.key||(bodies[s.key]&&bodies[s.key].parent===p))?0xffaa00:0x00d2ff);});
   labels.forEach(L=>L.el.classList.remove('sel'));
@@ -3853,7 +3864,7 @@ function gmOf(b){if(b.gm)return b.gm;let g;
   else{const Re=b.Re||1,Me=Re<1.23?Math.pow(Re,3.58):Re<11?2.04*Math.pow(Re/1.23,1.7):318;g=398600.44*Me;}    // mass estimated from radius
   b.gm=g;return g;}
 const TW=[1,10,100,1000,1e4,1e5];
-const PH={p0:new Map(),hmax:1e9,active:false,vD:new V3(),landedOn:null,heat:0,rho:0,dragA:0,gload:0,impact:0};
+const PH={p0:new Map(),hmax:1e9,active:false,vD:new V3(),landedOn:null,heat:0,rho:0,dragA:0,gload:0,impact:0,fl:new V3(0,0,-1)};
 /* Atmospheres: density at the surface (kg/m³; for gas giants at the 1-bar level), scale height (km), and where it fades to nothing (km).
    The ship has a ballistic coefficient of 400 kg/m² (a large capsule): drag = ρv²/2β. Heating at the nose follows Sutton–Graves. */
 const ATM={earth:[1.225,8.5,140],mars:[0.020,11.1,120],venus:[65,15.9,250],titan:[5.3,40,600],jupiter:[0.16,27,1000],saturn:[0.19,59.5,1500],uranus:[0.42,27.7,800],neptune:[0.45,19.7,700]};
@@ -3882,7 +3893,7 @@ function physicsStep(dt,thr){
       const A=ATM[B[i].key];if(A&&vel){const r=Math.sqrt(_pd.lengthSq()),alt=r-B[i].Rkm;if(alt<A[2]){const rho=A[0]*Math.exp(-Math.max(alt,0)/A[1])*sstep(A[2],A[2]*0.7,alt);
         _ps.copy(_pd).negate();_pw.copy(W[i]).cross(_ps).add(VB[i]);_pw.subVectors(vel,_pw);const sp=_pw.length();if(sp>1e-9){
         let ad=rho*sp*sp*1000/(2*SHIP_BETA);if(h)ad=Math.min(ad,sp*0.8/h);out.addScaledVector(_pw,-ad/sp);
-        if(rho>rhoNow){rhoNow=rho;dragNow=ad*1000;heatNow=1.7415e-4*Math.sqrt(rho)*Math.pow(sp*1000,3);}}}}}return out;};
+        if(rho>rhoNow){rhoNow=rho;dragNow=ad*1000;PH.fl.copy(_pw).divideScalar(sp);heatNow=1.7415e-4*Math.sqrt(rho)*Math.pow(sp*1000,3);}}}}}return out;};
   // standing on a world: it turns, and carries you with it
   if(PH.landedOn){const i=B.indexOf(PH.landedOn);if(i>=0){spinOf(B[i],_ps);const w=_ps.length();if(w>0){_pq.setFromAxisAngle(_ps.normalize(),w*dtS);pos.sub(P0[i]).applyQuaternion(_pq).add(P1[i]);}}}
   const steps=clamp(Math.ceil(dtS/PH.hmax),1,100),h=dtS/steps;
@@ -3907,6 +3918,39 @@ function physicsStep(dt,thr){
   PH.gload=(PH.landedOn?mu/(r*r)*1000:aT.length()*1000+PH.dragA)/9.80665;CK.orb.heat=PH.heat;CK.orb.rho=PH.rho;CK.orb.gl=PH.gload;
   PH.D=D;PH.mu=mu;PH.rel=rel;PH.rv=rv;PH.Dpos=P1[D];PH.DR=B[D].Rkm;
   CK.vel.copy(rv);B.forEach((b,i)=>PH.p0.get(b).copy(P1[i]));return true;}
+/* Re-entry plasma: the air ahead of the ship is squeezed into a shock layer and glows. It is drawn in 3D round the ship, so you see it
+   only through the windows: a blazing bow straight ahead along your path through the air, and glowing streamers that flow back past
+   the sides. Its strength follows the real heating rate (from a faint glow at ~0.1 MW/m² to a white-orange fireball beyond ~5 MW/m²). */
+const PLASMA=(()=>{const mat=extOpts(new THREE.ShaderMaterial({transparent:true,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.BackSide,
+    uniforms:{uFlow:{value:new V3(0,0,-1)},uHeat:{value:0},uTime:{value:0}},
+    vertexShader:`varying vec3 vD;
+#include <common>
+#include <logdepthbuf_pars_vertex>
+void main(){vD=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);
+#include <logdepthbuf_vertex>
+}`,
+    fragmentShader:`varying vec3 vD;uniform vec3 uFlow;uniform float uHeat,uTime;
+#include <logdepthbuf_pars_fragment>
+float h2(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h2(i),h2(i+vec2(1,0)),f.x),mix(h2(i+vec2(0,1)),h2(i+vec2(1,1)),f.x),f.y);}
+void main(){
+#include <logdepthbuf_fragment>
+ vec3 d=normalize(vD),F=normalize(uFlow);float c=dot(d,F);
+ vec3 a=normalize(cross(F,abs(F.y)<0.9?vec3(0,1,0):vec3(1,0,0))),b=cross(F,a);float ph=atan(dot(d,b),dot(d,a));float th=acos(clamp(c,-1.,1.));
+ float t=uTime;
+ // streamers: torn ribbons of glowing gas flowing from the bow back along the hull
+ float s1=n2(vec2(ph*9.,th*2.2-t*5.5)),s2=n2(vec2(ph*23.+3.,th*5.-t*9.));float st=pow(clamp(s1*0.65+s2*0.45,0.,1.),4.2)*smoothstep(2.1,0.25,th)*smoothstep(0.,0.35,th);
+ float bow=pow(max(c,0.),8.)*(0.8+0.4*n2(vec2(ph*5.,t*7.)));float core=pow(max(c,0.),60.);
+ float I=uHeat;
+ vec3 col=mix(vec3(.9,.25,.75),vec3(1.,.48,.16),smoothstep(0.1,0.85,c));col=mix(col,vec3(1.,.9,.7),core);col=mix(col,vec3(.75,.85,1.),smoothstep(0.75,1.,I)*core*0.6);
+ float A=I*(bow*0.75+core*1.3*I)+st*I*(0.22+0.55*I)*(0.25+bow);
+ A*=0.86+0.14*sin(t*47.+ph*3.);
+ gl_FragColor=vec4(col*A,1.);}`}));
+  const m=new THREE.Mesh(new THREE.SphereGeometry(1,64,32),mat);m.frustumCulled=false;m.renderOrder=999;m.visible=false;scene.add(m);let lvl=0;
+  function update(dt){const target=clamp(Math.log10(Math.max(PH.heat,1)/8e4)/1.8,0,1);lvl+=(target-lvl)*Math.min(1,dt*4);
+    m.visible=lvl>0.01;if(!m.visible)return;m.position.copy(camera.position);m.scale.setScalar(Math.max(camera.near*40,1e-4));
+    mat.uniforms.uFlow.value.copy(PH.fl);mat.uniforms.uHeat.value=lvl;mat.uniforms.uTime.value+=dt;}
+  return{update,off(){lvl=0;m.visible=false;}};})();
 const PATH=(()=>{const N=360,g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));g.setDrawRange(0,0);
   const m=new THREE.LineBasicMaterial({color:0x7fe3ff,transparent:true,opacity:.55,depthWrite:false});const L=new THREE.Line(g,m);L.frustumCulled=false;L.visible=false;scene.add(L);
   const _e=new V3(),_hq=new V3(),_P=new V3(),_Q=new V3(),_x=new V3();
@@ -3950,9 +3994,8 @@ function cockpitUpdate(dt){
   // buffeting: the ship shakes with g-load and air drag, hardest in a fiery entry
   if(phys){const sh=Math.min(1,(PH.dragA/9.8)*0.05+Math.max(0,PH.gload-1.2)*0.02+(PH.impact||0)*0.6);PH.impact=Math.max(0,(PH.impact||0)-dt*1.5);
     if(sh>0.002){const t=performance.now()/1000,j=sh*0.012;camera.quaternion.multiply(_pq.setFromEuler(new THREE.Euler(Math.sin(t*37.)*j,Math.sin(t*29.+1.)*j,Math.sin(t*41.+2.)*j*0.6)));}
-    {let el=document.getElementById('ckHeat');if(!el){el=document.createElement('div');el.id='ckHeat';document.body.appendChild(el);}
-     const hv=clamp(Math.log10(Math.max(PH.heat,1)/1e5)/2.2,0,1);el.style.opacity=(hv*(0.75+0.25*Math.sin(performance.now()/60))).toFixed(3);}}
-  else{const el=document.getElementById('ckHeat');if(el)el.style.opacity=0;}
+    PLASMA.update(dt);}
+  else PLASMA.off();
   PATH.update();
   camera.updateMatrixWorld();
   CK.vkm=phys&&CK.orb?CK.orb.v:CK.vel.length()*kmPerUnit();
@@ -4683,6 +4726,7 @@ function warmShaders(done){if(WARM.state)return;WARM.state=1;
   if(ext){scene.traverse(o=>{const m=o.material;if(m)(Array.isArray(m)?m:[m]).forEach(x=>mats.add(x));});
     const gpp=gl.getProgramParameter;gl.getProgramParameter=function(p,n){return n===gl.ACTIVE_UNIFORMS||n===gl.ACTIVE_ATTRIBUTES?0:gpp.call(this,p,n);};
     try{scene.updateMatrixWorld();renderer.compile(scene,camera);}catch(e){}
+    try{renderer.compile(nebScene,bhCam);renderer.compile(bhScene,bhCam);}catch(e){} // the nebula and black-hole renderers: their first use no longer stalls
     delete gl.getProgramParameter;}
   else{try{scene.updateMatrixWorld();renderer.compile(scene,camera);}catch(e){}fin();return;}
   const poll=()=>{let ok=true;try{for(const p of renderer.info.programs||[])if(!gl.getProgramParameter(p.program,ext.COMPLETION_STATUS_KHR)){ok=false;break;}}catch(e){}
