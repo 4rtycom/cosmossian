@@ -785,6 +785,7 @@ body.cockpit .rail{display:none}
       <li><b>Mars</b>: Viking orbiter colour mosaic from the NASA 3D Resources collection.</li>
       <li><b>Cockpit</b>: the switch panels, centre-console keypads and monitor frames are photographs of Space Shuttle Columbia's flight deck (NASA Johnson Space Center, 2001, from the NASA 3D Resources collection). The window frames and glareshield around them are modelled, and the monitors show live Cosmossian data rather than Shuttle software.</li>
       <li><b>Nebula photographs</b>: Orion, Ring, Cat's Eye, Crab, Veil, Butterfly and Cassiopeia A: NASA/ESA Hubble (ESA/Hubble, CC BY 4.0). Pillars of Creation (Eagle) and the Cosmic Cliffs (Carina): NASA, ESA, CSA, STScI (ESA/Webb, CC BY 4.0). Horsehead, Helix, Dumbbell, Lagoon, Trifid and Omega: ESO (CC BY 4.0). Also the Bubble (NASA, ESA, Hubble Heritage Team), the Cone (NASA, ESA, ACS Science Team), the Cosmic Reef NGC 2014 (NASA, ESA, STScI), the full Carina Nebula (NASA, ESA, N. Smith and the Hubble Heritage Team), the Tarantula, the Southern Ring and NGC 346 (NASA, ESA, CSA, STScI; ESA/Webb) and Messier 78 (ESO/Igor Chekalin). Foreground stars were removed; each picture is projected into a 3D volume whose depth follows its brightness (shell nebulae are hollow), so from the starting viewpoint you see the original photograph and from anywhere else a cloud you can fly round and through.</li>
+      <li><b>8K maps for 4K recordings</b>: Earth, the Moon, Mars and Mercury use 8K maps from Solar System Scope (CC BY 4.0), based on NASA Blue Marble, LRO, Viking/MGS and MESSENGER data, colour-matched to the standard maps.</li>
       <li><b>Asteroid shapes</b>: Bennu, Eros, Itokawa, Vesta and Kleopatra are drawn from NASA 3D Resources shape models (public domain), simplified for the web. Pluto wears the New Horizons map and is joined by Charon (true sizes, drawn closer than they really are); Ceres, Eris, Haumea, Makemake and the other dwarf planets are drawn as globes in their known colours (their true surfaces have never been imaged). Other small bodies stay as dots because their shape is not known.</li>
       <li><b>Other planets and moons</b>: Io, Europa, Ganymede, Callisto, Phobos, Deimos, Titania, Oberon and the Venus radar surface are spacecraft mosaics from the NASA 3D Resources collection (Galileo, Voyager, Viking, Magellan). Mercury, Venus’s cloud tops, Uranus, Enceladus and Triton are spacecraft-based maps distributed with the Stellarium planetarium (Oleg Pluton, CC BY 4.0; NASA/JPL and the Cassini imaging team). Where a spacecraft never photographed part of a moon (Callisto, Titania, Oberon), that part is generated. Titan stays generated because its haze hides the surface. Jupiter, Saturn and Neptune use 4,096-pixel true-colour maps by Askaniy Anpilogov, built from NASA/JPL-Caltech, Cassini, Juno and Voyager data and Björn Jónsson’s mosaics (CC BY 3.0, as distributed with Celestia).</li>
       <li><b>Nebulae you can fly into</b>: built as glowing volumes from each nebula’s class: hydrogen glows red, oxygen teal, dust blocks light, and the hot stars inside light the gas. Colours and shapes follow the real objects (for example the Ring’s shell, the Eagle’s pillars, the Veil’s filaments), but the 3D structure is a physical model, not a photograph or a measured map.</li>
@@ -2660,23 +2661,29 @@ REAL.big=matchMedia('(pointer:fine)').matches&&!matchMedia('(pointer:coarse)').m
       u.uMapA.value=tx[0];if(tx[1])u.uMapB.value=tx[1];if(tx[2])u.uMapC.value=tx[2];u.uReal.value=W.m;
       if(k==='earth'){b.extras.forEach((cm,i)=>{if(i===0){cm.material.uniforms.uMapC.value=tx[2];cm.material.uniforms.uReal.value=1;}else cm.visible=false;});}
       // a sharper set replaces a softer one: free the old photos (generated surfaces are not THREE.Texture photos from this loader)
-      if(REAL.state[k]===4)old.forEach(t=>{if(t&&t.isTexture&&!tx.includes(t)&&t.__real)t.dispose();});
+      if(REAL.state[k]===4||REAL.state[k]===6)old.forEach(t=>{if(t&&t.isTexture&&!tx.includes(t)&&t.__real)t.dispose();});
       tx.forEach(t=>t.__real=true);REAL.loaded[k]=true;if(k==='earth'&&tx[2])TODAY.clouds(b,tx[2]);};
   // 1: load the 2048 set (or the only size there is); 3: load the 4096 set. state 2 = soft set in place, 4 = sharp set in place
   REAL.load=(k,sharp)=>{const W=REAL.want[k],st=REAL.state[k]||0;if(!W)return;
     if(!sharp&&st)return;if(sharp&&(st!==2||!W.f.some(f=>REAL.HI.has(f))))return;
     REAL.state[k]=sharp?3:1;
     Promise.all(W.f.map(f=>get(!sharp&&REAL.HI.has(f)?'2k/'+f:f))).then(tx=>{REAL.state[k]=sharp?4:2;apply(k,W,tx);}).catch(()=>{REAL.state[k]=sharp?2:0;});};
+  // 8K maps (Solar System Scope, CC BY 4.0, from NASA data), used only for 4K stream recordings: 5 = loading, 6 = in place
+  REAL.X8=new Set(['earth_day.jpg','moon_color.jpg','mars_color.jpg','mercury.jpg']);
+  REAL.load8=k=>{const W=REAL.want[k],b=bodies[k],prev=REAL.state[k];if(!W||!b||!W.f.some(f=>REAL.X8.has(f)))return;REAL.state[k]=5;
+    const u=b.mesh.material.uniforms,cur=[u.uMapA.value,u.uMapB.value,u.uMapC.value];
+    Promise.all(W.f.map((f,i)=>REAL.X8.has(f)?get('8k/'+f):Promise.resolve(cur[i]))).then(tx=>{REAL.state[k]=6;apply(k,W,tx);}).catch(()=>{REAL.state[k]=prev;REAL.no8=REAL.no8||{};REAL.no8[k]=1;});};
   // how many pixels the body's radius covers on screen
   const _bp=new V3(),_bs=new V3();
   const pxRadius=b=>{b.mesh.getWorldPosition(_bp);const d=camera.position.distanceTo(_bp);if(!(d>0))return 1e9;
     const r=b.mesh.getWorldScale(_bs).x;return r/d/Math.tan(camera.fov*Math.PI/360)*(renderer.domElement.clientHeight||innerHeight)/2;};
   let next=0;
   REAL.tick=now=>{if(now<next)return;next=now+250;
-    for(const k in REAL.want){const b=bodies[k];if(!b||!b.mesh)continue;const st=REAL.state[k]||0;if(st===4||st===1||st===3)continue;
+    for(const k in REAL.want){const b=bodies[k];if(!b||!b.mesh)continue;const st=REAL.state[k]||0;if(st===1||st===3||st===5||st===6)continue;const want8=window.__uhdW&&renderer.capabilities.maxTextureSize>=8192&&!(REAL.no8&&REAL.no8[k])&&REAL.want[k].f.some(f=>REAL.X8.has(f));if(st===4&&!want8)continue;
       const focus=C.focus===b;if(!focus&&!b.mesh.visible)continue;const px=pxRadius(b);
       if(!st&&(focus||px>6))REAL.load(k,false);
-      else if(st===2&&REAL.big&&px>450)REAL.load(k,true);}};
+      else if(st===2&&REAL.big&&px>(window.__uhdW?150:450)&&REAL.want[k].f.some(f=>REAL.HI.has(f)))REAL.load(k,true);
+      else if(want8&&(st===4||st===2)&&px>150)REAL.load8(k);}};
 })();
 await yieldUI();
 /* ================= REAL-DATA LAYERS =================
@@ -4597,7 +4604,7 @@ function ambTick(){if(!AMB.on||!CK.on||!AMB.b)return;const A=AMB,b=A.b,ph=((perf
   A._u.copy(A._e1).multiplyScalar(Math.cos(ph)).addScaledVector(A._e2,Math.sin(ph));A._f.copy(A._e1).multiplyScalar(-Math.sin(ph)).addScaledVector(A._e2,Math.cos(ph));
   if(TS)CK.posKm.copy(bodyKm(b)).addScaledVector(A._u,b.Rkm*A.k);else camera.position.copy(A._c).addScaledVector(A._u,r);CK.vel.set(0,0,0);
   // nose ahead and down towards the world, a little to one side; slow breathing motions, each a whole number of cycles per lap
-  const limb=Math.acos(1/A.k),disc=Math.asin(1/A.k),pit=limb+0.30+A.pitch*disc+0.04*Math.sin(ph*3+1),yaw=0.22+0.06*Math.sin(ph*2),roll=0.05*Math.sin(ph*4+2);
+  const limb=Math.acos(1/A.k),disc=Math.asin(1/A.k),pit=limb+0.12+A.pitch*disc*0.6+0.04*Math.sin(ph*3+1),yaw=0.22+0.06*Math.sin(ph*2),roll=0.05*Math.sin(ph*4+2);
   A._l.copy(A._f).multiplyScalar(Math.cos(pit)).addScaledVector(A._u,-Math.sin(pit)).applyAxisAngle(A._u,yaw);
   A._m.lookAt(A._c.set(0,0,0),A._l,A._u);CK.ship.quaternion.setFromRotationMatrix(A._m);
   CK.ship.quaternion.multiply(A._q.setFromAxisAngle(A._c.set(0,0,1),roll));
