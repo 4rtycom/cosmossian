@@ -65,3 +65,11 @@ re-encoding, so the server is nearly idle.
 - Live log: `journalctl -u cosmossian@tv -f`
 - New recording: upload it, run `cosmossian-prepare`, then `systemctl restart cosmossian@tv`.
 - If anything drops, the service restarts itself after 5 seconds, and both streams start again after a server reboot.
+
+## 4K (ultra HD)
+
+- Record in OBS at 3840×2160, 30 fps, with the 4K links: `?stream=ambient&at=saturn&loop=10` (4K by default) or `?stream=tv&uhd=1` / `?stream=cockpit&uhd=1`.
+- Prepare with `4k` at the end: `cosmossian-prepare /srv/cosmossian/tv-recording.mkv tv 4k` (20 Mbit/s).
+- In YouTube Studio the stream key must allow 2160p: create the key with resolution "Variable" or 2160p.
+- Traffic: one 4K stream at 20 Mbit/s sends about 6.5 TB per month; two send about 13 TB. Pick a server plan that includes that.
+- Converting a 4K recording on a small server is slow (several hours per hour of video); it only has to be done once.
