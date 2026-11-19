@@ -857,7 +857,8 @@ const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(50,1,1e-5,2e5);camera.layers.enable(1); // layer 1: fixed-screen-size sprites (not drawn in the cockpit camera feed)
 let quality='ultra';
 const maxOct=()=>quality==='ultra'?14:11;
-function pixelRatio(){const d=window.devicePixelRatio||1;return quality==='ultra'?Math.min(2,Math.max(1.5,d)):Math.min(d,1);}
+function pixelRatio(){if(window.__uhdW)return Math.min(4,Math.max(1,window.__uhdW/innerWidth)); // stream recordings: the picture is rendered at a fixed width (3840 = 4K), whatever the window size
+  const d=window.devicePixelRatio||1;return quality==='ultra'?Math.min(2,Math.max(1.5,d)):Math.min(d,1);}
 function resize(){renderer.setPixelRatio(pixelRatio());renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
 addEventListener('resize',resize);resize();
 // build the icon rail from the existing buttons (same elements, so every action keeps working)
@@ -4577,11 +4578,13 @@ function strmTick(dt){ambTick();if(!STRM.on||fading)return;if(STRM.wait>0){STRM.
 const AMB={on:false,t0:0,T:600,b:null,k:3,inc:0.42,_e1:new V3(),_e2:new V3(),_n:new V3(),_u:new V3(),_f:new V3(),_l:new V3(),_c:new V3(),_m:new THREE.Matrix4(),_q:new THREE.Quaternion()};
 // distance from the centre (in radii), tilt of the lap away from the Sun line, and how far below the horizon the windows aim (0 limb .. 1 centre)
 const AMB_AT={saturn:[3.4,0.9,0.15],earth:[1.3,0.95,0.5],jupiter:[1.7,0.95,0.4],mars:[1.3,0.95,0.5],moon:[1.3,0.95,0.5],neptune:[1.7,0.95,0.4],venus:[1.3,0.95,0.5]};
+// lock the best quality for recordings: no automatic drop to Smooth, and a fixed render width
+function strmUHD(w){autoDropped=true;window.__uhdW=w?Math.min(w,renderer.capabilities.maxTextureSize):0;setQuality('ultra');}
 function ambStart(){if(AMB.on)return;const q=new URLSearchParams(location.search),at=AMB_AT[q.get('at')]?q.get('at'):'saturn';
   AMB.b=bodies[at];[AMB.k,AMB.inc,AMB.pitch]=AMB_AT[at];AMB.T=clamp(+q.get('loop')||10,1,120)*60;AMB.on=true;document.documentElement.classList.add('amb');
-  rate=0;strmMark('');setCockpit(true);AMB.t0=performance.now();
+  rate=0;strmMark('');strmUHD(q.get('hd')==='1'?0:(+q.get('width')||3840));setCockpit(true);AMB.t0=performance.now();
   // real shadows in the cabin
-  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;ckSun.castShadow=true;const sh=ckSun.shadow;sh.mapSize.set(2048,2048);sh.bias=-0.0006;sh.normalBias=0.004;sh.radius=3;
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;ckSun.castShadow=true;const sh=ckSun.shadow;sh.mapSize.set(4096,4096);sh.bias=-0.0006;sh.normalBias=0.004;sh.radius=3;
   const oc=sh.camera;oc.left=-2.2;oc.right=2.2;oc.top=2.2;oc.bottom=-2.2;oc.near=1;oc.far=10;oc.updateProjectionMatrix();
   ckScene.traverse(o=>{if(!o.isMesh)return;const m=o.material;if(!m||m.isShaderMaterial||m.isMeshBasicMaterial)return;o.receiveShadow=true;o.castShadow=!m.transparent;m.needsUpdate=true;});
   const wake=()=>{try{if(!cabin)startCabin();if(audio.ctx&&audio.ctx.state==='suspended')audio.ctx.resume();}catch(e){}};['pointerdown','keydown'].forEach(e=>addEventListener(e,wake));wake();}
@@ -4599,7 +4602,7 @@ function ambTick(){if(!AMB.on||!CK.on||!AMB.b)return;const A=AMB,b=A.b,ph=((perf
   A._m.lookAt(A._c.set(0,0,0),A._l,A._u);CK.ship.quaternion.setFromRotationMatrix(A._m);
   CK.ship.quaternion.multiply(A._q.setFromAxisAngle(A._c.set(0,0,1),roll));
   CK.hy=0.10*Math.sin(ph*5+0.5);CK.hp=0.03*Math.sin(ph*7);}
-function strmStart(){if(window.__stream!=='cockpit'||STRM.on)return;STRM.on=true;strmMark('');setCockpit(true);STRM.wait=5;}
+function strmStart(){if(window.__stream!=='cockpit'||STRM.on)return;STRM.on=true;strmUHD(new URLSearchParams(location.search).get('uhd')==='1'?3840:0);strmMark('');setCockpit(true);STRM.wait=5;}
 addEventListener('cosmossian:entered',()=>{if(window.__stream==='ambient')setTimeout(ambStart,800);if(window.__stream==='cockpit')setTimeout(strmStart,800);if(window.__stream==='tv')strmMark('');});
 if(window.__stream&&!window.__intro)setTimeout(()=>{if(window.__stream==='ambient')ambStart();else if(window.__stream==='cockpit')strmStart();else strmMark('');},800);
 $('#ckExit').addEventListener('click',()=>setCockpit(false));
@@ -4739,7 +4742,7 @@ function tvTick(dt){const now=performance.now()/1000,rdt=Math.min(1,now-(TV.last
   if(!TV.on||TV.paused||fading)return;if(!C.flight)C.gTh+=dt*0.05; // a slow circle around each stop
   const st=tvStop_();TV.t+=rdt;TV.fT+=rdt;
   if(TV.fT>TV_FACT){TV.fT=0;TV.f++;if(TV.f>=st.facts.length){tvNext(1);return;}tvShow();}}
-addEventListener('cosmossian:entered',()=>{if(window.__tv)setTimeout(tvStart,600);});
+addEventListener('cosmossian:entered',()=>{if(window.__tv)setTimeout(tvStart,600);if(window.__stream==='tv')strmUHD(new URLSearchParams(location.search).get('uhd')==='1'?3840:0);});
 if(window.__tv&&!window.__intro)setTimeout(tvStart,600); // the title screen may have finished before this script ran
 addEventListener('keydown',e=>{if(!TV.on)return;const k=e.key;let used=true;
   if(k==='ArrowRight'||k==='MediaTrackNext'||k==='ChannelUp')tvNext(1);
