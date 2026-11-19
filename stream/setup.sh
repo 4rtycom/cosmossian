@@ -22,14 +22,15 @@ chmod 640 /etc/cosmossian-stream.env
 # prepare a recording once: YouTube-friendly H.264 with a keyframe every 2 s and an audio track, so it can be looped without re-encoding
 cat > /usr/local/bin/cosmossian-prepare <<'PREP'
 #!/usr/bin/env bash
-# usage: cosmossian-prepare <recording> <tv|cockpit>
+# usage: cosmossian-prepare <recording> <tv|cockpit> [4k]
 set -euo pipefail
 in="$1"; name="$2"; out="/srv/cosmossian/videos/$name.mp4"; tmp="$out.part.mp4"
+if [ "${3:-}" = "4k" ]; then W=3840; H=2160; BR=20M; BUF=40M; else W=1920; H=1080; BR=8M; BUF=16M; fi
 has_audio=$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$in" | head -n1)
 if [ -n "$has_audio" ]; then audio=(-map 0:v:0 -map 0:a:0); else audio=(-f lavfi -i anullsrc=r=48000:cl=stereo -map 0:v:0 -map 1:a:0 -shortest); fi
 ffmpeg -hide_banner -y -i "$in" "${audio[@]}" \
-  -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p" \
-  -c:v libx264 -preset veryfast -profile:v high -b:v 8M -maxrate 8M -bufsize 16M -g 60 -keyint_min 60 -sc_threshold 0 \
+  -vf "scale=$W:$H:force_original_aspect_ratio=decrease,pad=$W:$H:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p" \
+  -c:v libx264 -preset veryfast -profile:v high -b:v $BR -maxrate $BR -bufsize $BUF -g 60 -keyint_min 60 -sc_threshold 0 \
   -c:a aac -b:a 128k -ar 48000 -movflags +faststart "$tmp"
 mv "$tmp" "$out"; chown cosmo:cosmo "$out"
 echo "Ready: $out  ->  now run: systemctl restart cosmossian@$name"
