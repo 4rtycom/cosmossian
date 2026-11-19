@@ -341,6 +341,7 @@ body.cockpit #hint{display:none}
 #introGo:focus-visible{outline:2px solid #fff;outline-offset:5px}
 @media (max-width:520px){#introName{letter-spacing:.2em;margin-right:-.2em}#introTag{letter-spacing:.26em;margin-right:-.26em}#introGo{min-height:56px;padding:0 34px;font-size:16px}}
 @media (max-height:440px){.intro-c{gap:12px}#introName{font-size:clamp(26px,9vh,48px)}#introLogo{max-height:30vh}}
+html.stream.amb #hud,html.stream.amb #strmMark small{display:none!important}
 html.stream .ckbar,html.stream #toast,html.stream #hudShow,html.stream #tvExit,html.stream .ckhelp,html.stream #ckHelp,html.stream #lblPanel,html.stream #ckExit,html.stream #ckCtl{display:none!important}
 html.stream,html.stream *{cursor:none!important}
 html.stream body.cockpit .leftcol,html.stream body.cockpit .dock,html.stream body.cockpit .rail{opacity:0!important;visibility:hidden!important}
@@ -525,7 +526,7 @@ body.cockpit .rail{display:none}
    Open the page with #explore in the address to go straight to the explorer once the check has passed. */
 (function(){
   const el=document.getElementById('intro');if(!el)return;
-  const qs=new URLSearchParams(location.search),strm=qs.get('stream');if(strm==='tv'||strm==='cockpit'){window.__stream=strm;document.documentElement.classList.add('stream');}
+  const qs=new URLSearchParams(location.search),strm=qs.get('stream');if(strm==='tv'||strm==='cockpit'||strm==='ambient'){window.__stream=strm;document.documentElement.classList.add('stream');}
   const tvParam=qs.get('tv')==='1'||strm==='tv';if(tvParam)window.__tv=true;
   const skip=location.hash==='#explore'||tvParam||!!window.__stream;
   el.hidden=false;window.__intro=true;
@@ -4496,6 +4497,13 @@ function ckBoundaries(dt){
 /* ---------- Space Shuttle cabin ambience: 400 Hz avionics hum, cabin fans, quindar tones and radio static ---------- */
 let cabin=null;
 function startCabin(){if(!audioCtx())return;const ctx=audio.ctx;
+  if(window.__stream==='ambient'){const out=ctx.createGain();out.gain.value=0;out.connect(ctx.destination);
+    const buf=ctx.createBuffer(2,ctx.sampleRate*8,ctx.sampleRate);for(let ch=0;ch<2;ch++){const d=buf.getChannelData(ch);let b0=0,b1=0,b2=0;for(let i=0;i<d.length;i++){const w=Math.random()*2-1;b0=0.99765*b0+w*0.0990460;b1=0.96300*b1+w*0.2965164;b2=0.57000*b2+w*1.0526913;d[i]=(b0+b1+b2+w*0.1848)*0.22;}
+      for(let i=0;i<4000;i++){const k=i/4000;d[i]=d[i]*k+d[d.length-4000+i]*(1-k);}} // pink noise, cross-faded so its own loop cannot be heard
+    const mk=(type,f,q,g)=>{const n=ctx.createBufferSource();n.buffer=buf;n.loop=true;n.loopEnd=buf.duration-4000/ctx.sampleRate;const fl=ctx.createBiquadFilter();fl.type=type;fl.frequency.value=f;fl.Q.value=q;const gg=ctx.createGain();gg.gain.value=g;n.connect(fl);fl.connect(gg);gg.connect(out);n.start(0,Math.random()*4);return gg;};
+    mk('lowpass',1400,0.3,0.42);mk('lowpass',110,0.7,0.9);mk('bandpass',320,0.6,0.12);
+    const eg=ctx.createGain();eg.gain.value=0;const ef=ctx.createBiquadFilter();
+    cabin={out,eng:eg,engF:ef,timer:0};out.gain.linearRampToValueAtTime(0.9,ctx.currentTime+4);if(ctx.state==='suspended')ctx.resume();return;}
   const out=ctx.createGain();out.gain.value=0;out.connect(ctx.destination);
   const hum=ctx.createOscillator();hum.frequency.value=400;const hg=ctx.createGain();hg.gain.value=0.012;hum.connect(hg);hg.connect(out);hum.start();
   const hum2=ctx.createOscillator();hum2.frequency.value=800;const hg2=ctx.createGain();hg2.gain.value=0.004;hum2.connect(hg2);hg2.connect(out);hum2.start();
@@ -4560,12 +4568,40 @@ function strmNext(){if(fading)return;if(!CK.on){setCockpit(true);STRM.wait=4;ret
     STRM.q=pl.slice(0,3);const st=all.find(b=>b.kind==='star');if(st)STRM.q.push(st);if(!STRM.q.length){STRM.n=4;return;}}
   const b=STRM.q.shift();STRM.n++;select({type:'body',key:b.key});CK.auto=true;$('#ckAuto').classList.add('on');STRM.t=0;STRM.hold=0;
   strmMark('Autopilot → '+b.name+(active!=='sol'?' · '+active+' system':''));}
-function strmTick(dt){if(!STRM.on||fading)return;if(STRM.wait>0){STRM.wait-=dt;if(STRM.wait<=0)strmNext();return;}
+function strmTick(dt){ambTick();if(!STRM.on||fading)return;if(STRM.wait>0){STRM.wait-=dt;if(STRM.wait<=0)strmNext();return;}
   STRM.t+=dt;if(CK.auto){if(STRM.t>110){CK.auto=false;$('#ckAuto').classList.remove('on');}return;}
   STRM.hold+=dt;if(STRM.hold>8)strmNext();}
+/* Ambient flight (?stream=ambient&at=saturn&loop=10): you sit in the cockpit while the ship circles a world once every `loop` minutes.
+   Sunlight comes through the windows and the frames throw real shadows that creep across the panels; on the night side the cabin falls dark.
+   The clock is stopped and every motion is a whole number of cycles per lap, so a recording of one lap repeats without a seam. */
+const AMB={on:false,t0:0,T:600,b:null,k:3,inc:0.42,_e1:new V3(),_e2:new V3(),_n:new V3(),_u:new V3(),_f:new V3(),_l:new V3(),_c:new V3(),_m:new THREE.Matrix4(),_q:new THREE.Quaternion()};
+// distance from the centre (in radii), tilt of the lap away from the Sun line, and how far below the horizon the windows aim (0 limb .. 1 centre)
+const AMB_AT={saturn:[3.4,0.9,0.15],earth:[1.3,0.95,0.5],jupiter:[1.7,0.95,0.4],mars:[1.3,0.95,0.5],moon:[1.3,0.95,0.5],neptune:[1.7,0.95,0.4],venus:[1.3,0.95,0.5]};
+function ambStart(){if(AMB.on)return;const q=new URLSearchParams(location.search),at=AMB_AT[q.get('at')]?q.get('at'):'saturn';
+  AMB.b=bodies[at];[AMB.k,AMB.inc,AMB.pitch]=AMB_AT[at];AMB.T=clamp(+q.get('loop')||10,1,120)*60;AMB.on=true;document.documentElement.classList.add('amb');
+  rate=0;strmMark('');setCockpit(true);AMB.t0=performance.now();
+  // real shadows in the cabin
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;ckSun.castShadow=true;const sh=ckSun.shadow;sh.mapSize.set(2048,2048);sh.bias=-0.0006;sh.normalBias=0.004;sh.radius=3;
+  const oc=sh.camera;oc.left=-2.2;oc.right=2.2;oc.top=2.2;oc.bottom=-2.2;oc.near=1;oc.far=10;oc.updateProjectionMatrix();
+  ckScene.traverse(o=>{if(!o.isMesh)return;const m=o.material;if(!m||m.isShaderMaterial||m.isMeshBasicMaterial)return;o.receiveShadow=true;o.castShadow=!m.transparent;m.needsUpdate=true;});
+  const wake=()=>{try{if(!cabin)startCabin();if(audio.ctx&&audio.ctx.state==='suspended')audio.ctx.resume();}catch(e){}};['pointerdown','keydown'].forEach(e=>addEventListener(e,wake));wake();}
+function ambTick(){if(!AMB.on||!CK.on||!AMB.b)return;const A=AMB,b=A.b,ph=((performance.now()-A.t0)/1000%A.T)/A.T*TAU;
+  b.pivot.getWorldPosition(A._c);const R=bR(b),r=R*A.k;b.tilt.getWorldQuaternion(A._q);
+  // the lap leans towards the Sun line, so most of it is in daylight, with a short pass through the world's shadow
+  const S=A._f.copy(SUN.pivot.getWorldPosition(A._l)).sub(A._c).normalize(),P=A._e2.set(0,1,0).applyQuaternion(A._q);
+  P.addScaledVector(S,-P.dot(S)).normalize();A._n.copy(S).multiplyScalar(Math.cos(A.inc)).addScaledVector(P,Math.sin(A.inc));
+  A._e1.copy(A._n).cross(S).normalize();A._e2.copy(A._n).cross(A._e1);
+  A._u.copy(A._e1).multiplyScalar(Math.cos(ph)).addScaledVector(A._e2,Math.sin(ph));A._f.copy(A._e1).multiplyScalar(-Math.sin(ph)).addScaledVector(A._e2,Math.cos(ph));
+  if(TS)CK.posKm.copy(bodyKm(b)).addScaledVector(A._u,b.Rkm*A.k);else camera.position.copy(A._c).addScaledVector(A._u,r);CK.vel.set(0,0,0);
+  // nose ahead and down towards the world, a little to one side; slow breathing motions, each a whole number of cycles per lap
+  const limb=Math.acos(1/A.k),disc=Math.asin(1/A.k),pit=limb+0.30+A.pitch*disc+0.04*Math.sin(ph*3+1),yaw=0.22+0.06*Math.sin(ph*2),roll=0.05*Math.sin(ph*4+2);
+  A._l.copy(A._f).multiplyScalar(Math.cos(pit)).addScaledVector(A._u,-Math.sin(pit)).applyAxisAngle(A._u,yaw);
+  A._m.lookAt(A._c.set(0,0,0),A._l,A._u);CK.ship.quaternion.setFromRotationMatrix(A._m);
+  CK.ship.quaternion.multiply(A._q.setFromAxisAngle(A._c.set(0,0,1),roll));
+  CK.hy=0.10*Math.sin(ph*5+0.5);CK.hp=0.03*Math.sin(ph*7);}
 function strmStart(){if(window.__stream!=='cockpit'||STRM.on)return;STRM.on=true;strmMark('');setCockpit(true);STRM.wait=5;}
-addEventListener('cosmossian:entered',()=>{if(window.__stream==='cockpit')setTimeout(strmStart,800);if(window.__stream==='tv')strmMark('');});
-if(window.__stream&&!window.__intro)setTimeout(()=>{if(window.__stream==='cockpit')strmStart();else strmMark('');},800);
+addEventListener('cosmossian:entered',()=>{if(window.__stream==='ambient')setTimeout(ambStart,800);if(window.__stream==='cockpit')setTimeout(strmStart,800);if(window.__stream==='tv')strmMark('');});
+if(window.__stream&&!window.__intro)setTimeout(()=>{if(window.__stream==='ambient')ambStart();else if(window.__stream==='cockpit')strmStart();else strmMark('');},800);
 $('#ckExit').addEventListener('click',()=>setCockpit(false));
 $('#ckStop').addEventListener('click',()=>{CK.auto=false;$('#ckAuto').classList.remove('on');CK.throttle=0;$('#ckThrottle').value=0;$('#ckThrTxt').textContent='0%';CK.vel.set(0,0,0);
   if(CK.phys&&CK.pv&&PH.active){CK.pv.copy(PH.vD);toast('Engines off and speed matched to '+(CK.orb?CK.orb.name:'the nearest body')+': gravity now pulls you straight in',3600);}});
