@@ -4636,7 +4636,7 @@ void main(){vec2 c=gl_PointCoord-0.5;float r=length(c)*2.;if(r>1.)discard;float 
  // the nearest stars get four fine rays
  float ray=smoothstep(8.,22.,vS)*(exp(-abs(c.x)*90.)+exp(-abs(c.y)*90.))*(1.-r)*0.6;gl_FragColor=vec4(vC*(a+ray),1.);}`});
   const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=-5;scene.add(pts);
-  const laps=clamp(Math.round(AMB.T/200),1,12); // about one volume every 200 seconds: a calm glide
+  const laps=clamp(Math.round(AMB.T/600*(+new URLSearchParams(location.search).get('speed')||1)),1,24); // about one volume every 10 minutes: a slow glide (&speed=2 doubles it)
   return{q0,tick(f){sky.position.copy(camera.position);pts.position.copy(camera.position);pts.quaternion.copy(CK.ship.quaternion);m.uniforms.uT.value=f*laps;m.uniforms.uPR.value=renderer.getPixelRatio()*(innerHeight/900);}};}
 function ambTick(){if(!AMB.on||!CK.on)return;const A=AMB,b=A.b,ph=((performance.now()-A.t0)/1000%A.T)/A.T*TAU;
   if(A.stars){ // deep space: the ship flies straight ahead towards the heart of the Milky Way; stars stream past, nothing turns
