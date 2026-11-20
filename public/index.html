@@ -4595,11 +4595,54 @@ function ambStart(){if(AMB.on)return;const q=new URLSearchParams(location.search
   const oc=sh.camera;oc.left=-2.2;oc.right=2.2;oc.top=2.2;oc.bottom=-2.2;oc.near=1;oc.far=10;oc.updateProjectionMatrix();
   ckScene.traverse(o=>{if(!o.isMesh)return;const m=o.material;if(!m||m.isShaderMaterial||m.isMeshBasicMaterial)return;o.receiveShadow=true;o.castShadow=!m.transparent;m.needsUpdate=true;});
   const wake=()=>{try{if(!cabin)startCabin();if(audio.ctx&&audio.ctx.state==='suspended')audio.ctx.resume();}catch(e){}};['pointerdown','keydown'].forEach(e=>addEventListener(e,wake));wake();}
+/* The deep field for the stars-only flight: a painted Milky Way with glowing gas and dust lanes far away (fixed on the sky), and a
+   volume of stars the ship flies through. The star volume repeats, and the ship covers a whole number of volumes per lap: no seam. */
+function deepField(){
+  const rq=new THREE.Quaternion();realSky.getWorldQuaternion(rq);
+  const gc=catDir(266.4,-29.0).applyQuaternion(rq).normalize(),gn=catDir(192.86,27.13).applyQuaternion(rq).normalize();
+  // fly a little off the galactic centre, so the bright band runs diagonally across the windows
+  const aim=gc.clone().applyAxisAngle(gn,0.25).normalize(),up=gn.clone().applyAxisAngle(aim,0.6);
+  const q0=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new V3(),aim,up));
+  const sky=new THREE.Mesh(new THREE.SphereGeometry(1,48,32),new THREE.ShaderMaterial({side:THREE.BackSide,depthTest:false,depthWrite:false,transparent:true,blending:THREE.AdditiveBlending,
+    uniforms:{uN:{value:gn},uC:{value:gc}},vertexShader:'varying vec3 vD;void main(){vD=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader:NOISE+`varying vec3 vD;uniform vec3 uN,uC;
+void main(){vec3 d=normalize(vD);float lat=dot(d,uN);float toC=dot(d,uC)*0.5+0.5;
+ vec3 q=d*2.6;float w=cl_fbm(q*1.3+3.,4.);
+ float band=exp(-pow(lat/(0.16+0.12*toC),2.))*(0.35+0.9*toC*toC);
+ float bulge=exp(-pow(acos(clamp(dot(d,uC),-1.,1.))/0.42,2.));
+ float cl=cl_fbm(q*2.2+w*1.6,5.);float fine=cl_fbm(q*7.+w*2.,4.);
+ // dust lanes: dark rifts along the middle of the band
+ float dust=smoothstep(0.42,0.7,cl_fbm(q*3.1+vec3(7.,1.,4.)+w,5.))*exp(-pow(lat/0.1,2.));
+ vec3 star=mix(vec3(.62,.72,1.),vec3(1.,.86,.66),toC)*(band*(0.15+1.5*cl*cl)+bulge*0.7)*(0.6+0.8*fine*fine);
+ // glowing gas: hydrogen pink and oxygen teal in patches near the band
+ float g1=smoothstep(0.56,0.82,cl_fbm(q*1.9+vec3(11.,5.,2.),5.))*exp(-pow(lat/0.3,2.));
+ float g2=smoothstep(0.58,0.85,cl_fbm(q*1.6+vec3(2.,13.,8.),5.))*exp(-pow(lat/0.42,2.));
+ float g3=smoothstep(0.6,0.9,cl_fbm(q*1.2+vec3(21.,3.,17.),4.));
+ vec3 gas=vec3(1.,.28,.5)*g1*0.55+vec3(.2,.75,.85)*g2*0.38+vec3(.32,.3,.9)*g3*0.12;
+ vec3 col=(star*0.34+gas*1.35*(0.3+0.7*fine))*(1.-0.9*dust);
+ gl_FragColor=vec4(col*0.55,1.);}`}));
+  sky.frustumCulled=false;sky.renderOrder=-20;sky.scale.setScalar(5e4);scene.add(sky);
+  const N=70000,L=700,P=new Float32Array(N*3),Cc=new Float32Array(N*3),Sz=new Float32Array(N),R=rng(777);
+  for(let i=0;i<N;i++){P[i*3]=(R()-0.5)*L;P[i*3+1]=(R()-0.5)*L;P[i*3+2]=(R()-0.5)*L;const t=R(),b=0.35+0.65*Math.pow(R(),3);
+    const c=t<0.5?[.78,.86,1]:t<0.78?[1,.96,.88]:t<0.93?[1,.82,.58]:[1,.6,.45];Cc[i*3]=c[0]*b;Cc[i*3+1]=c[1]*b;Cc[i*3+2]=c[2]*b;Sz[i]=0.5+2.6*Math.pow(R(),5);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(P,3));g.setAttribute('aCol',new THREE.BufferAttribute(Cc,3));g.setAttribute('aSize',new THREE.BufferAttribute(Sz,1));
+  const m=new THREE.ShaderMaterial({transparent:true,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending,uniforms:{uT:{value:0},uL:{value:L},uPR:{value:1}},
+    vertexShader:`attribute vec3 aCol;attribute float aSize;uniform float uT,uL,uPR;varying vec3 vC;varying float vS;
+void main(){vec3 p=position;p.z=mod(p.z+uT*uL+uL*0.5,uL)-uL*0.5;vec4 mv=modelViewMatrix*vec4(p,1.);float d=length(mv.xyz);gl_Position=projectionMatrix*mv;
+ float s=aSize*uPR*150./max(d,1.);gl_PointSize=clamp(s,1.2*uPR,30.*uPR);
+ vC=aCol*smoothstep(uL*0.5,uL*0.34,d)*smoothstep(3.,20.,d)*min(1.,s/(1.2*uPR)+0.25);vS=gl_PointSize/uPR;}`,
+    fragmentShader:`varying vec3 vC;varying float vS;
+void main(){vec2 c=gl_PointCoord-0.5;float r=length(c)*2.;if(r>1.)discard;float a=exp(-r*r*7.)+0.5*exp(-r*r*60.);
+ // the nearest stars get four fine rays
+ float ray=smoothstep(8.,22.,vS)*(exp(-abs(c.x)*90.)+exp(-abs(c.y)*90.))*(1.-r)*0.6;gl_FragColor=vec4(vC*(a+ray),1.);}`});
+  const pts=new THREE.Points(g,m);pts.frustumCulled=false;pts.renderOrder=-5;scene.add(pts);
+  const laps=clamp(Math.round(AMB.T/200),1,12); // about one volume every 200 seconds: a calm glide
+  return{q0,tick(f){sky.position.copy(camera.position);pts.position.copy(camera.position);pts.quaternion.copy(CK.ship.quaternion);m.uniforms.uT.value=f*laps;m.uniforms.uPR.value=renderer.getPixelRatio()*(innerHeight/900);}};}
 function ambTick(){if(!AMB.on||!CK.on)return;const A=AMB,b=A.b,ph=((performance.now()-A.t0)/1000%A.T)/A.T*TAU;
-  if(A.stars){ // deep space: far above the planets, nothing but the real sky. The ship turns once per lap, so the whole Milky Way drifts past
-    if(TS)CK.posKm.set(0,60*AU_KM,0);CK.vel.set(0,0,0);
-    CK.ship.quaternion.setFromAxisAngle(A._u.set(0,1,0),-ph).multiply(A._q.setFromAxisAngle(A._c.set(1,0,0),0.22*Math.sin(ph*2+0.6))).multiply(A._q.setFromAxisAngle(A._c.set(0,0,1),0.07*Math.sin(ph*3)));
-    CK.hy=0.08*Math.sin(ph*5+0.5);CK.hp=0.03*Math.sin(ph*7);return;}
+  if(A.stars){ // deep space: the ship flies straight ahead towards the heart of the Milky Way; stars stream past, nothing turns
+    if(TS)CK.posKm.set(0,60*AU_KM,0);CK.vel.set(0,0,0);if(!A.deep)A.deep=deepField();
+    CK.ship.quaternion.copy(A.deep.q0).multiply(A._q.setFromAxisAngle(A._c.set(1,0,0),0.03*Math.sin(ph*2+0.6))).multiply(A._q.setFromAxisAngle(A._c.set(0,1,0),0.035*Math.sin(ph*3))).multiply(A._q.setFromAxisAngle(A._c.set(0,0,1),0.02*Math.sin(ph*2)));
+    A.deep.tick(ph/TAU);CK.hy=0.05*Math.sin(ph*4+0.5);CK.hp=0.02*Math.sin(ph*6);return;}
   if(!b)return;
   b.pivot.getWorldPosition(A._c);const R=bR(b),r=R*A.k;b.tilt.getWorldQuaternion(A._q);
   // the lap leans towards the Sun line, so most of it is in daylight, with a short pass through the world's shadow
